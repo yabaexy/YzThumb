@@ -156,7 +156,7 @@ const CodeBlock = ({ code }: { code: string }) => (
 );
 
 export default function App() {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMixing, setIsMixing] = useState(false);
@@ -165,6 +165,14 @@ export default function App() {
   const [isConnecting, setIsConnecting] = useState(false);
   
   const chartData = useMemo(() => generateMockChartData(), []);
+
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'tumble', label: 'Tumble', icon: RefreshCw },
+    { id: 'contract', label: 'Smart Contract', icon: Code2 },
+    { id: 'history', label: 'History', icon: History },
+    { id: 'security', label: 'Security', icon: Shield },
+  ];
 
   // Fetch real token data on load
   useEffect(() => {
@@ -299,107 +307,155 @@ contract WydaTumbler {
 }`;
 
   return (
-    <div className="min-h-screen bg-bnb-black flex">
-      {/* Sidebar */}
-      <aside className={cn(
-        "fixed inset-y-0 left-0 z-50 w-64 bg-bnb-dark border-r border-white/5 transition-transform duration-300 lg:relative lg:translate-x-0",
-        !isSidebarOpen && "-translate-x-full"
-      )}>
-        <div className="p-6 flex flex-col h-full">
-          <div className="flex items-center gap-3 mb-10">
-            <div className="w-10 h-10 bg-bnb-yellow rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(243,186,47,0.3)]">
-              <ArrowRightLeft className="w-6 h-6 text-bnb-black" />
+    <div className="min-h-screen bg-bnb-black flex flex-col">
+      {/* Mobile Sidebar Overlay */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] lg:hidden"
+            />
+            <motion.aside 
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed inset-y-0 left-0 w-72 bg-bnb-dark border-r border-white/5 z-[70] lg:hidden p-6 flex flex-col"
+            >
+              <div className="flex items-center justify-between mb-10">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-bnb-yellow rounded-lg flex items-center justify-center">
+                    <ArrowRightLeft className="w-5 h-5 text-bnb-black" />
+                  </div>
+                  <h1 className="text-lg font-bold font-display tracking-tight">Y'z <span className="text-bnb-yellow">thumb.</span></h1>
+                </div>
+                <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 hover:bg-white/5 rounded-lg">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <nav className="space-y-1">
+                {navItems.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setActiveTab(item.id);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all",
+                      activeTab === item.id 
+                        ? "bg-bnb-yellow/10 text-bnb-yellow" 
+                        : "text-gray-400 hover:text-gray-100 hover:bg-white/5"
+                    )}
+                  >
+                    <item.icon className="w-5 h-5" />
+                    {item.label}
+                  </button>
+                ))}
+              </nav>
+
+              <div className="mt-auto p-4 bg-white/5 rounded-2xl border border-white/5">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  <span className="text-[10px] uppercase tracking-wider text-gray-500 font-bold">BSC Mainnet</span>
+                </div>
+                <p className="text-xs text-gray-400 truncate font-mono">{WYDA_CONTRACT}</p>
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Top Navigation / Header */}
+      <header className="h-20 border-b border-white/5 flex items-center justify-between px-6 lg:px-12 sticky top-0 bg-bnb-black/80 backdrop-blur-xl z-50">
+        <div className="flex items-center gap-8">
+          {/* Branding */}
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="lg:hidden p-2 hover:bg-white/5 rounded-lg"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+            <div className="hidden lg:flex items-center gap-3 mr-4">
+              <div className="w-9 h-9 bg-bnb-yellow rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(243,186,47,0.2)]">
+                <ArrowRightLeft className="w-5 h-5 text-bnb-black" />
+              </div>
+              <h1 className="text-xl font-bold font-display tracking-tight">Y'z <span className="text-bnb-yellow">thumb.</span></h1>
             </div>
-            <h1 className="text-xl font-bold font-display tracking-tight">Y'z <span className="text-bnb-yellow">thumb.</span></h1>
           </div>
 
-          <nav className="space-y-1 flex-1">
-            {[
-              { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-              { id: 'tumble', label: 'Tumble', icon: RefreshCw },
-              { id: 'contract', label: 'Smart Contract', icon: Code2 },
-              { id: 'history', label: 'History', icon: History },
-              { id: 'security', label: 'Security', icon: Shield },
-            ].map((item) => (
+          {/* Desktop Navigation Links */}
+          <nav className="hidden lg:flex items-center gap-1">
+            {navItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
                 className={cn(
-                  "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all",
+                  "px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2",
                   activeTab === item.id 
                     ? "bg-bnb-yellow/10 text-bnb-yellow" 
                     : "text-gray-400 hover:text-gray-100 hover:bg-white/5"
                 )}
               >
-                <item.icon className="w-5 h-5" />
+                <item.icon className="w-4 h-4" />
                 {item.label}
               </button>
             ))}
           </nav>
+        </div>
 
-          <div className="mt-auto p-4 bg-white/5 rounded-2xl border border-white/5">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-[10px] uppercase tracking-wider text-gray-500 font-bold">BSC Mainnet</span>
-            </div>
-            <p className="text-xs text-gray-400 truncate font-mono">{WYDA_CONTRACT}</p>
+        <div className="flex items-center gap-4">
+          <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-white/5 rounded-full border border-white/5">
+            <span className="text-xs font-mono text-gray-400">WYDA:</span>
+            <span className="text-xs font-bold text-bnb-yellow">$0.00004218</span>
+            <span className="text-[10px] text-green-400 font-bold">+12.4%</span>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={address ? disconnectWallet : connectWallet}
+              disabled={isConnecting}
+              className={cn(
+                "px-4 lg:px-6 py-2 font-bold rounded-full text-sm transition-all shadow-[0_0_15px_rgba(243,186,47,0.2)] flex items-center gap-2",
+                address ? "bg-white/10 text-gray-100 border border-white/10 hover:bg-white/20" : "bg-bnb-yellow text-bnb-black hover:bg-bnb-yellow/90"
+              )}
+            >
+              {isConnecting ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Wallet className="w-4 h-4" />
+              )}
+              <span className="hidden xs:inline">
+                {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Connect Wallet"}
+              </span>
+              <span className="xs:hidden">
+                {address ? `${address.slice(0, 4)}...` : "Connect"}
+              </span>
+            </button>
+            
+            {address && (
+              <button 
+                onClick={disconnectWallet}
+                className="p-2 bg-white/5 hover:bg-red-500/10 text-gray-400 hover:text-red-400 rounded-full transition-colors"
+                title="Disconnect"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
-      </aside>
+      </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-screen overflow-y-auto">
-        {/* Header */}
-        <header className="h-20 border-b border-white/5 flex items-center justify-between px-8 sticky top-0 bg-bnb-black/80 backdrop-blur-xl z-40">
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="lg:hidden p-2 hover:bg-white/5 rounded-lg"
-            >
-              <Menu className="w-6 h-6" />
-            </button>
-            <h2 className="text-lg font-semibold capitalize font-display">{activeTab === 'contract' ? 'Solidity Source' : activeTab}</h2>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-white/5 rounded-full border border-white/5">
-              <span className="text-xs font-mono text-gray-400">WYDA:</span>
-              <span className="text-xs font-bold text-bnb-yellow">$0.00004218</span>
-              <span className="text-[10px] text-green-400 font-bold">+12.4%</span>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={address ? disconnectWallet : connectWallet}
-                disabled={isConnecting}
-                className={cn(
-                  "px-6 py-2 font-bold rounded-full text-sm transition-all shadow-[0_0_15px_rgba(243,186,47,0.2)] flex items-center gap-2",
-                  address ? "bg-white/10 text-gray-100 border border-white/10 hover:bg-white/20" : "bg-bnb-yellow text-bnb-black hover:bg-bnb-yellow/90"
-                )}
-              >
-                {isConnecting ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Wallet className="w-4 h-4" />
-                )}
-                {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Connect Wallet"}
-              </button>
-              
-              {address && (
-                <button 
-                  onClick={disconnectWallet}
-                  className="p-2 bg-white/5 hover:bg-red-500/10 text-gray-400 hover:text-red-400 rounded-full transition-colors"
-                  title="Disconnect"
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          </div>
-        </header>
-
+      <main className="flex-1 overflow-y-auto">
         {/* Content Area */}
-        <div className="p-8 max-w-7xl mx-auto w-full space-y-8">
+        <div className="p-6 lg:p-12 max-w-7xl mx-auto w-full space-y-8">
           
           {activeTab === 'dashboard' && (
             <>
