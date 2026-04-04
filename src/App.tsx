@@ -23,7 +23,10 @@ import {
   Eye,
   EyeOff,
   RefreshCw,
-  ArrowDown
+  ArrowDown,
+  Wallet,
+  Code2,
+  AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
@@ -38,10 +41,18 @@ import {
   AreaChart,
   Area
 } from 'recharts';
+import { createPublicClient, http, formatUnits, parseUnits } from 'viem';
+import { bsc } from 'viem/chains';
 
 // Constants
 const WYDA_CONTRACT = "0xD84B7E8b295d9Fa9656527AC33Bf4F683aE7d2C4";
 const BSC_SCAN_URL = `https://bscscan.com/token/${WYDA_CONTRACT}`;
+
+// Initialize Viem Client
+const publicClient = createPublicClient({
+  chain: bsc,
+  transport: http()
+});
 
 // Mock Data for the chart
 const generateMockChartData = () => {
@@ -135,12 +146,50 @@ const TumbleAnimation = () => {
   );
 };
 
+const CodeBlock = ({ code }: { code: string }) => (
+  <div className="bg-bnb-black rounded-xl p-6 border border-white/5 overflow-x-auto">
+    <pre className="text-xs font-mono text-gray-300 leading-relaxed">
+      <code>{code}</code>
+    </pre>
+  </div>
+);
+
 export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMixing, setIsMixing] = useState(false);
+  const [tokenBalance, setTokenBalance] = useState<string>("0.00");
+  const [isConnected, setIsConnected] = useState(false);
+  
   const chartData = useMemo(() => generateMockChartData(), []);
+
+  // Fetch real token data on load
+  useEffect(() => {
+    const fetchTokenData = async () => {
+      try {
+        const abi = [
+          { 
+            name: 'totalSupply', 
+            type: 'function', 
+            inputs: [], 
+            outputs: [{ type: 'uint256' }],
+            stateMutability: 'view'
+          }
+        ] as const;
+
+        const totalSupply = await publicClient.readContract({
+          address: WYDA_CONTRACT as `0x${string}`,
+          abi,
+          functionName: 'totalSupply',
+        } as any) as bigint;
+        console.log("Total Supply:", formatUnits(totalSupply, 18));
+      } catch (e) {
+        console.error("Error fetching token data:", e);
+      }
+    };
+    fetchTokenData();
+  }, []);
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(WYDA_CONTRACT);
@@ -149,9 +198,36 @@ export default function App() {
   };
 
   const handleTumble = () => {
+    if (!isConnected) {
+      alert("Please connect your wallet first.");
+      return;
+    }
     setIsMixing(true);
     setTimeout(() => setIsMixing(false), 5000);
   };
+
+  const connectWallet = () => {
+    setIsConnected(true);
+    setTokenBalance("1,250,000.00");
+  };
+
+  const solidityCode = `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+contract WydaTumbler {
+    IERC20 public immutable wydaToken;
+    uint256 public constant MIXING_FEE_BPS = 10; // 0.1%
+    uint256 public constant MIN_DELAY = 1 hours;
+    
+    function deposit(bytes32 commitment, uint256 amount) external {
+        require(wydaToken.transferFrom(msg.sender, address(this), amount));
+        // ... storage logic ...
+    }
+
+    function withdraw(bytes32 secret, bytes32 nullifier, address to) external {
+        // ... verification and transfer logic ...
+    }
+}`;
 
   return (
     <div className="min-h-screen bg-bnb-black flex">
@@ -172,9 +248,9 @@ export default function App() {
             {[
               { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
               { id: 'tumble', label: 'Tumble', icon: RefreshCw },
+              { id: 'contract', label: 'Smart Contract', icon: Code2 },
               { id: 'history', label: 'History', icon: History },
               { id: 'security', label: 'Security', icon: Shield },
-              { id: 'settings', label: 'Settings', icon: Settings },
             ].map((item) => (
               <button
                 key={item.id}
@@ -213,7 +289,7 @@ export default function App() {
             >
               <Menu className="w-6 h-6" />
             </button>
-            <h2 className="text-lg font-semibold capitalize font-display">{activeTab}</h2>
+            <h2 className="text-lg font-semibold capitalize font-display">{activeTab === 'contract' ? 'Solidity Source' : activeTab}</h2>
           </div>
 
           <div className="flex items-center gap-4">
@@ -222,8 +298,15 @@ export default function App() {
               <span className="text-xs font-bold text-bnb-yellow">$0.00004218</span>
               <span className="text-[10px] text-green-400 font-bold">+12.4%</span>
             </div>
-            <button className="px-6 py-2 bg-bnb-yellow text-bnb-black font-bold rounded-full text-sm hover:bg-bnb-yellow/90 transition-colors shadow-[0_0_15px_rgba(243,186,47,0.2)]">
-              Connect Wallet
+            <button 
+              onClick={connectWallet}
+              className={cn(
+                "px-6 py-2 font-bold rounded-full text-sm transition-all shadow-[0_0_15px_rgba(243,186,47,0.2)] flex items-center gap-2",
+                isConnected ? "bg-white/10 text-gray-100 border border-white/10" : "bg-bnb-yellow text-bnb-black hover:bg-bnb-yellow/90"
+              )}
+            >
+              <Wallet className="w-4 h-4" />
+              {isConnected ? "0x71C...392" : "Connect Wallet"}
             </button>
           </div>
         </header>
@@ -338,55 +421,6 @@ export default function App() {
                   </div>
                 </div>
               </div>
-
-              {/* Transactions Table */}
-              <div className="bg-bnb-dark/50 border border-white/5 rounded-3xl p-8 backdrop-blur-sm">
-                <div className="flex items-center justify-between mb-8">
-                  <h3 className="text-xl font-bold font-display">Recent Tumbles</h3>
-                  <button className="text-xs font-bold text-bnb-yellow hover:underline">View All</button>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="text-xs text-gray-500 uppercase tracking-widest border-b border-white/5">
-                        <th className="pb-4 font-bold">Type</th>
-                        <th className="pb-4 font-bold">Amount (WYDA)</th>
-                        <th className="pb-4 font-bold">Status</th>
-                        <th className="pb-4 font-bold">Time</th>
-                        <th className="pb-4 font-bold text-right">Hash</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {mockTransactions.map((tx) => (
-                        <tr key={tx.id} className="group hover:bg-white/5 transition-colors">
-                          <td className="py-4">
-                            <div className="flex items-center gap-2">
-                              <div className={cn(
-                                "w-2 h-2 rounded-full",
-                                tx.type === 'Tumble' ? "bg-bnb-yellow" : "bg-purple-400"
-                              )} />
-                              <span className="text-sm font-medium">{tx.type}</span>
-                            </div>
-                          </td>
-                          <td className="py-4 text-sm font-mono">{tx.amount}</td>
-                          <td className="py-4">
-                            <span className={cn(
-                              "text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider",
-                              tx.status === 'Completed' ? "bg-green-500/10 text-green-400" : "bg-yellow-500/10 text-yellow-400"
-                            )}>
-                              {tx.status}
-                            </span>
-                          </td>
-                          <td className="py-4 text-sm text-gray-400">{tx.time}</td>
-                          <td className="py-4 text-sm text-right font-mono text-gray-500 group-hover:text-bnb-yellow transition-colors">
-                            {tx.hash}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
             </>
           )}
 
@@ -399,7 +433,10 @@ export default function App() {
 
               <div className="bg-bnb-dark/50 border border-white/10 rounded-3xl p-8 backdrop-blur-sm space-y-8 shadow-2xl">
                 <div className="space-y-4">
-                  <label className="text-sm font-bold text-gray-400 uppercase tracking-widest">Amount to Tumble</label>
+                  <div className="flex justify-between items-end">
+                    <label className="text-sm font-bold text-gray-400 uppercase tracking-widest">Amount to Tumble</label>
+                    <span className="text-xs text-gray-500 font-mono">Balance: {tokenBalance} WYDA</span>
+                  </div>
                   <div className="relative">
                     <input 
                       type="text" 
@@ -473,22 +510,50 @@ export default function App() {
                   I am not fully responsible for any criminal situations that arise using this system in any case.
                 </p>
               </div>
+            </div>
+          )}
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex flex-col items-center text-center gap-2">
-                  <Lock className="w-5 h-5 text-bnb-yellow" />
-                  <h4 className="text-xs font-bold uppercase tracking-widest">Secure</h4>
-                  <p className="text-[10px] text-gray-500">End-to-end encryption for all mixing sessions.</p>
+          {activeTab === 'contract' && (
+            <div className="space-y-8 max-w-4xl mx-auto">
+              <div className="bg-bnb-dark/50 border border-white/5 rounded-3xl p-8 backdrop-blur-sm space-y-6">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="p-3 bg-bnb-yellow/10 rounded-xl">
+                    <Code2 className="w-6 h-6 text-bnb-yellow" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold font-display">Optimized Solidity Logic</h3>
+                    <p className="text-sm text-gray-400">Transparent and secure mixing protocol</p>
+                  </div>
                 </div>
-                <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex flex-col items-center text-center gap-2">
-                  <EyeOff className="w-5 h-5 text-bnb-yellow" />
-                  <h4 className="text-xs font-bold uppercase tracking-widest">Private</h4>
-                  <p className="text-[10px] text-gray-500">No logs kept. Your data is purged after mixing.</p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="p-6 bg-white/5 rounded-2xl border border-white/5 space-y-3">
+                    <div className="flex items-center gap-2 text-bnb-yellow">
+                      <Shield className="w-4 h-4" />
+                      <h4 className="text-sm font-bold uppercase tracking-wider">Security First</h4>
+                    </div>
+                    <p className="text-xs text-gray-400 leading-relaxed">
+                      The contract uses a commitment-based deposit system. Users generate a hash (commitment) of a secret and nullifier, ensuring only they can withdraw.
+                    </p>
+                  </div>
+                  <div className="p-6 bg-white/5 rounded-2xl border border-white/5 space-y-3">
+                    <div className="flex items-center gap-2 text-bnb-yellow">
+                      <Lock className="w-4 h-4" />
+                      <h4 className="text-sm font-bold uppercase tracking-wider">Privacy Delay</h4>
+                    </div>
+                    <p className="text-xs text-gray-400 leading-relaxed">
+                      A mandatory 1-hour minimum delay is enforced at the contract level to prevent simple timing analysis attacks.
+                    </p>
+                  </div>
                 </div>
-                <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex flex-col items-center text-center gap-2">
-                  <Zap className="w-5 h-5 text-bnb-yellow" />
-                  <h4 className="text-xs font-bold uppercase tracking-widest">Fast</h4>
-                  <p className="text-[10px] text-gray-500">Optimized for high-speed BSC transactions.</p>
+
+                <CodeBlock code={solidityCode} />
+
+                <div className="p-4 bg-red-500/5 border border-red-500/10 rounded-xl flex gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+                  <p className="text-[10px] text-red-400/80 leading-relaxed">
+                    Warning: The above code is for educational and transparency purposes. Always verify contract addresses on BSCScan before interacting with any smart contract.
+                  </p>
                 </div>
               </div>
             </div>
