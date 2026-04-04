@@ -49,51 +49,46 @@ import { bsc } from 'viem/chains';
 const WYDA_CONTRACT = "0xD84B7E8b295d9Fa9656527AC33Bf4F683aE7d2C4";
 const BSC_SCAN_URL = `https://bscscan.com/token/${WYDA_CONTRACT}`;
 
+interface Transaction {
+  id: string;
+  type: 'Tumble' | 'Mix';
+  amount: string;
+  status: 'Completed' | 'Pending' | 'Failed';
+  timestamp: string;
+  txHash: string;
+}
+
+const mockTransactions: Transaction[] = [
+  { id: '1', type: 'Tumble', amount: '5,000 WYDA', status: 'Completed', timestamp: '2026-04-04 10:30', txHash: '0x7a...f21' },
+  { id: '2', type: 'Mix', amount: '12,500 WYDA', status: 'Completed', timestamp: '2026-04-04 09:15', txHash: '0x3b...e8a' },
+  { id: '3', type: 'Tumble', amount: '1,000 WYDA', status: 'Pending', timestamp: '2026-04-04 11:45', txHash: '0x9d...c4b' },
+  { id: '4', type: 'Mix', amount: '25,000 WYDA', status: 'Failed', timestamp: '2026-04-03 22:10', txHash: '0x1e...d92' },
+  { id: '5', type: 'Tumble', amount: '8,200 WYDA', status: 'Completed', timestamp: '2026-04-03 18:55', txHash: '0x5c...a11' },
+];
+
 // Initialize Viem Client
 const publicClient = createPublicClient({
   chain: bsc,
   transport: http()
 });
 
-// Mock Data for the chart
-const generateMockChartData = () => {
-  const data = [];
-  let price = 0.000042;
-  for (let i = 0; i < 24; i++) {
-    price = price * (1 + (Math.random() * 0.1 - 0.04));
-    data.push({
-      time: `${i}:00`,
-      price: price.toFixed(8),
-    });
-  }
-  return data;
-};
-
-const mockTransactions = [
-  { id: 1, type: 'Tumble', amount: '1,250,000', status: 'Completed', time: '2m ago', hash: '0x123...abc' },
-  { id: 2, type: 'Mix', amount: '850,000', status: 'Processing', time: '5m ago', hash: '0x456...def' },
-  { id: 3, type: 'Tumble', amount: '2,100,000', status: 'Completed', time: '12m ago', hash: '0x789...ghi' },
-  { id: 4, type: 'Tumble', amount: '500,000', status: 'Completed', time: '18m ago', hash: '0xabc...123' },
-];
-
 // Components
-const StatCard = ({ title, value, change, icon: Icon }: { title: string, value: string, change?: string, icon: any }) => (
-  <div className="bg-bnb-dark/50 border border-white/5 p-6 rounded-2xl backdrop-blur-sm">
-    <div className="flex items-start justify-between mb-4">
-      <div className="p-2 bg-bnb-yellow/10 rounded-lg">
-        <Icon className="w-5 h-5 text-bnb-yellow" />
+const LegalDisclaimer = ({ className }: { className?: string }) => (
+  <div className={cn("p-4 bg-red-500/5 border border-red-500/10 rounded-xl", className)}>
+    <div className="flex gap-3">
+      <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+      <div className="space-y-2">
+        <p className="text-[10px] text-red-400/80 leading-relaxed font-medium">
+          I am prohibiting the use of this system for any illegal activity in any case. I am not fully responsible for any criminal situations that arise using this system in any case.
+        </p>
+        <p className="text-[10px] text-red-400/80 leading-relaxed font-medium">
+          私はいかなる場合においても、このシステムを違法行為に使用することを禁止します。 いかなる場合においても、この制度を利用して発生するいかなる犯罪状況についても、私は完全には責任を負いません。
+        </p>
+        <p className="text-[10px] text-red-400/80 leading-relaxed font-medium">
+          我禁止在任何情况下将此系统用于任何非法活动。 在任何情况下，使用这个系统出现的任何刑事情况，我都不完全负责。
+        </p>
       </div>
-      {change && (
-        <span className={cn(
-          "text-xs font-medium px-2 py-1 rounded-full",
-          change.startsWith('+') ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
-        )}>
-          {change}
-        </span>
-      )}
     </div>
-    <h3 className="text-gray-400 text-sm font-medium">{title}</h3>
-    <p className="text-2xl font-bold mt-1 font-display tracking-tight">{value}</p>
   </div>
 );
 
@@ -164,8 +159,6 @@ export default function App() {
   const [address, setAddress] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   
-  const chartData = useMemo(() => generateMockChartData(), []);
-
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'tumble', label: 'Tumble', icon: RefreshCw },
@@ -458,59 +451,19 @@ contract WydaTumbler {
         <div className="p-6 lg:p-12 max-w-7xl mx-auto w-full space-y-8">
           
           {activeTab === 'dashboard' && (
-            <>
-              {/* Stats Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard title="Market Cap" value="$1.2M" change="+5.2%" icon={TrendingUp} />
-                <StatCard title="Total Supply" value="100B" icon={Coins} />
-                <StatCard title="Holders" value="4,218" change="+12" icon={Shield} />
-                <StatCard title="Volume (24h)" value="$425K" change="-2.1%" icon={Zap} />
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Chart Section */}
-                <div className="lg:col-span-2 bg-bnb-dark/50 border border-white/5 rounded-3xl p-8 backdrop-blur-sm">
-                  <div className="flex items-center justify-between mb-8">
-                    <div>
-                      <h3 className="text-xl font-bold font-display">Price Performance</h3>
-                      <p className="text-sm text-gray-400">Real-time WYDA/BNB pair data</p>
+            <div className="space-y-8 animate-in fade-in duration-700">
+              <LegalDisclaimer />
+              
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Contract Info / Token Assets */}
+                <div className="bg-bnb-dark/50 border border-white/5 rounded-3xl p-8 backdrop-blur-sm flex flex-col h-full">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 bg-bnb-yellow/10 rounded-lg">
+                      <Coins className="w-5 h-5 text-bnb-yellow" />
                     </div>
-                    <div className="flex gap-2">
-                      {['1H', '4H', '1D', '1W'].map(t => (
-                        <button key={t} className={cn(
-                          "px-3 py-1 rounded-lg text-xs font-bold transition-colors",
-                          t === '1D' ? "bg-bnb-yellow text-bnb-black" : "bg-white/5 text-gray-400 hover:bg-white/10"
-                        )}>
-                          {t}
-                        </button>
-                      ))}
-                    </div>
+                    <h3 className="text-xl font-bold font-display">Token Assets</h3>
                   </div>
-                  <div className="h-[300px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartData}>
-                        <defs>
-                          <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#F3BA2F" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#F3BA2F" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
-                        <XAxis dataKey="time" stroke="#ffffff20" fontSize={10} tickLine={false} axisLine={false} />
-                        <YAxis hide domain={['auto', 'auto']} />
-                        <Tooltip 
-                          contentStyle={{ backgroundColor: '#1E2329', border: '1px solid #ffffff10', borderRadius: '12px' }}
-                          itemStyle={{ color: '#F3BA2F' }}
-                        />
-                        <Area type="monotone" dataKey="price" stroke="#F3BA2F" strokeWidth={2} fillOpacity={1} fill="url(#colorPrice)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                {/* Contract Info */}
-                <div className="bg-bnb-dark/50 border border-white/5 rounded-3xl p-8 backdrop-blur-sm flex flex-col">
-                  <h3 className="text-xl font-bold font-display mb-6">Token Assets</h3>
+                  
                   <div className="space-y-6 flex-1">
                     <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
                       <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-2">Contract Address</p>
@@ -525,7 +478,7 @@ contract WydaTumbler {
                       </div>
                     </div>
 
-                    <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <a 
                         href={BSC_SCAN_URL} 
                         target="_blank" 
@@ -536,17 +489,17 @@ contract WydaTumbler {
                           <div className="p-2 bg-blue-500/10 rounded-lg">
                             <ExternalLink className="w-4 h-4 text-blue-400" />
                           </div>
-                          <span className="text-sm font-medium">View on BSCScan</span>
+                          <span className="text-sm font-medium">BSCScan</span>
                         </div>
                         <ArrowRightLeft className="w-4 h-4 text-gray-500 group-hover:translate-x-1 transition-transform" />
                       </a>
 
-                      <button className="w-full flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition-colors group">
+                      <button className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition-colors group">
                         <div className="flex items-center gap-3">
                           <div className="p-2 bg-orange-500/10 rounded-lg">
                             <TrendingUp className="w-4 h-4 text-orange-400" />
                           </div>
-                          <span className="text-sm font-medium">Buy on PancakeSwap</span>
+                          <span className="text-sm font-medium">PancakeSwap</span>
                         </div>
                         <ArrowRightLeft className="w-4 h-4 text-gray-500 group-hover:translate-x-1 transition-transform" />
                       </button>
@@ -556,15 +509,67 @@ contract WydaTumbler {
                   <div className="mt-8 p-4 bg-bnb-yellow/5 rounded-2xl border border-bnb-yellow/10">
                     <div className="flex items-center gap-2 mb-2">
                       <Shield className="w-4 h-4 text-bnb-yellow" />
-                      <span className="text-xs font-bold text-bnb-yellow">Audit Status</span>
+                      <span className="text-xs font-bold text-bnb-yellow">Security & Audit</span>
                     </div>
                     <p className="text-[10px] text-gray-400 leading-relaxed">
-                      Contract verified and audited by community security partners. Liquidity locked for 365 days.
+                      Contract verified and audited by community security partners. Liquidity locked for 365 days. Secure commitment-based privacy protocol.
                     </p>
                   </div>
                 </div>
+
+                {/* Recent Tumbles Table on Dashboard */}
+                <div className="bg-bnb-dark/50 border border-white/5 rounded-3xl p-8 backdrop-blur-sm h-full">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-bnb-yellow/10 rounded-lg">
+                        <History className="w-5 h-5 text-bnb-yellow" />
+                      </div>
+                      <h3 className="text-xl font-bold font-display">Recent Tumbles</h3>
+                    </div>
+                    <button 
+                      onClick={() => setActiveTab('history')}
+                      className="text-xs font-bold text-bnb-yellow hover:underline"
+                    >
+                      View All
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-white/5">
+                          <th className="pb-4 text-xs font-bold uppercase tracking-widest text-gray-500">Type</th>
+                          <th className="pb-4 text-xs font-bold uppercase tracking-widest text-gray-500">Amount</th>
+                          <th className="pb-4 text-xs font-bold uppercase tracking-widest text-gray-500">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {mockTransactions.slice(0, 5).map((tx) => (
+                          <tr key={tx.id} className="group">
+                            <td className="py-4">
+                              <div className="flex items-center gap-2">
+                                {tx.type === 'Tumble' ? <Zap className="w-3 h-3 text-bnb-yellow" /> : <RefreshCw className="w-3 h-3 text-purple-400" />}
+                                <span className="text-sm font-medium">{tx.type}</span>
+                              </div>
+                            </td>
+                            <td className="py-4 font-mono text-sm">{tx.amount}</td>
+                            <td className="py-4">
+                              <span className={cn(
+                                "text-[10px] font-bold px-2 py-0.5 rounded-full",
+                                tx.status === 'Completed' ? "bg-green-500/10 text-green-400" :
+                                tx.status === 'Pending' ? "bg-bnb-yellow/10 text-bnb-yellow" :
+                                "bg-red-500/10 text-red-400"
+                              )}>
+                                {tx.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
-            </>
+            </div>
           )}
 
           {activeTab === 'tumble' && (
@@ -648,10 +653,7 @@ contract WydaTumbler {
                   )}
                 </button>
 
-                <p className="text-[10px] text-center text-gray-500 italic px-4">
-                  Notice: I am prohibiting the use of this system for any illegal activity in any case. 
-                  I am not fully responsible for any criminal situations that arise using this system in any case.
-                </p>
+                <LegalDisclaimer className="mt-4" />
               </div>
             </div>
           )}
@@ -702,8 +704,95 @@ contract WydaTumbler {
             </div>
           )}
 
+          {activeTab === 'history' && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-2xl font-bold font-display">Transaction History</h3>
+                  <p className="text-sm text-gray-400">Track your recent tumble and mix operations</p>
+                </div>
+                <button className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl border border-white/5 text-xs font-bold transition-all flex items-center gap-2">
+                  <RefreshCw className="w-3 h-3" />
+                  Refresh
+                </button>
+              </div>
+
+              <div className="bg-bnb-dark/50 border border-white/5 rounded-3xl overflow-hidden backdrop-blur-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-white/5 bg-white/[0.02]">
+                        <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-gray-500">Type</th>
+                        <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-gray-500">Amount</th>
+                        <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-gray-500">Status</th>
+                        <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-gray-500">Timestamp</th>
+                        <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-gray-500">TX Hash</th>
+                        <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-gray-500 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {mockTransactions.map((tx) => (
+                        <tr key={tx.id} className="hover:bg-white/[0.02] transition-colors group">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className={cn(
+                                "w-8 h-8 rounded-lg flex items-center justify-center",
+                                tx.type === 'Tumble' ? "bg-bnb-yellow/10 text-bnb-yellow" : "bg-purple-500/10 text-purple-400"
+                              )}>
+                                {tx.type === 'Tumble' ? <Zap className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
+                              </div>
+                              <span className="font-bold text-sm">{tx.type}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="text-sm font-mono font-medium">{tx.amount}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <div className={cn(
+                                "w-1.5 h-1.5 rounded-full",
+                                tx.status === 'Completed' ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" :
+                                tx.status === 'Pending' ? "bg-bnb-yellow animate-pulse shadow-[0_0_8px_rgba(243,186,47,0.5)]" :
+                                "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]"
+                              )} />
+                              <span className={cn(
+                                "text-xs font-bold",
+                                tx.status === 'Completed' ? "text-green-400" :
+                                tx.status === 'Pending' ? "text-bnb-yellow" :
+                                "text-red-400"
+                              )}>
+                                {tx.status}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="text-xs text-gray-400 font-medium">{tx.timestamp}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="text-xs text-gray-500 font-mono group-hover:text-gray-300 transition-colors">{tx.txHash}</span>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button className="p-2 hover:bg-bnb-yellow/10 text-gray-500 hover:text-bnb-yellow rounded-lg transition-all">
+                              <ExternalLink className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {mockTransactions.length === 0 && (
+                  <div className="py-20 text-center space-y-3">
+                    <History className="w-12 h-12 text-gray-700 mx-auto" />
+                    <p className="text-gray-500 font-medium">No transactions found</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Other tabs placeholders */}
-          {['history', 'security', 'settings'].includes(activeTab) && (
+          {['security', 'settings'].includes(activeTab) && (
             <div className="flex flex-col items-center justify-center py-20 space-y-4">
               <div className="p-6 bg-white/5 rounded-full border border-white/5">
                 <HelpCircle className="w-12 h-12 text-gray-600" />
@@ -720,11 +809,8 @@ contract WydaTumbler {
           <p className="text-xs text-gray-500">
             &copy; 2026 Y'z thumb. Ecosystem. Built for the BNB Smart Chain community.
           </p>
-          <div className="max-w-2xl mx-auto p-4 bg-red-500/5 border border-red-500/10 rounded-xl">
-            <p className="text-[10px] text-red-400/80 leading-relaxed font-medium">
-              DISCLAIMER: I am prohibiting the use of this system for any illegal activity in any case. 
-              I am not fully responsible for any criminal situations that arise using this system in any case.
-            </p>
+          <div className="max-w-3xl mx-auto">
+            <LegalDisclaimer />
           </div>
         </footer>
       </main>
