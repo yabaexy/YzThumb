@@ -26,7 +26,8 @@ import {
   ArrowDown,
   Wallet,
   Code2,
-  AlertTriangle
+  AlertTriangle,
+  LogOut
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
@@ -41,7 +42,7 @@ import {
   AreaChart,
   Area
 } from 'recharts';
-import { createPublicClient, http, formatUnits, parseUnits } from 'viem';
+import { createPublicClient, http, formatUnits, parseUnits, Address } from 'viem';
 import { bsc } from 'viem/chains';
 
 // Constants
@@ -160,7 +161,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMixing, setIsMixing] = useState(false);
   const [tokenBalance, setTokenBalance] = useState<string>("0.00");
-  const [isConnected, setIsConnected] = useState(false);
+  const [address, setAddress] = useState<string | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
   
   const chartData = useMemo(() => generateMockChartData(), []);
 
@@ -191,6 +193,78 @@ export default function App() {
     fetchTokenData();
   }, []);
 
+  // Handle account changes
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).ethereum) {
+      const ethereum = (window as any).ethereum;
+      
+      const handleAccountsChanged = (accounts: string[]) => {
+        if (accounts.length > 0) {
+          setAddress(accounts[0]);
+          fetchBalance(accounts[0]);
+        } else {
+          setAddress(null);
+          setTokenBalance("0.00");
+        }
+      };
+
+      ethereum.on('accountsChanged', handleAccountsChanged);
+      return () => ethereum.removeListener('accountsChanged', handleAccountsChanged);
+    }
+  }, []);
+
+  const fetchBalance = async (userAddress: string) => {
+    try {
+      const abi = [
+        { 
+          name: 'balanceOf', 
+          type: 'function', 
+          inputs: [{ name: 'account', type: 'address' }], 
+          outputs: [{ type: 'uint256' }],
+          stateMutability: 'view'
+        }
+      ] as const;
+
+      const balance = await publicClient.readContract({
+        address: WYDA_CONTRACT as `0x${string}`,
+        abi,
+        functionName: 'balanceOf',
+        args: [userAddress as `0x${string}`]
+      } as any) as bigint;
+      
+      setTokenBalance(new Intl.NumberFormat().format(Number(formatUnits(balance, 18))));
+    } catch (e) {
+      console.error("Error fetching balance:", e);
+    }
+  };
+
+  const connectWallet = async () => {
+    if (typeof window === 'undefined' || !(window as any).ethereum) {
+      alert("Please install a Web3 wallet like MetaMask.");
+      return;
+    }
+
+    setIsConnecting(true);
+    try {
+      const accounts = await (window as any).ethereum.request({ 
+        method: 'eth_requestAccounts' 
+      });
+      if (accounts.length > 0) {
+        setAddress(accounts[0]);
+        await fetchBalance(accounts[0]);
+      }
+    } catch (error) {
+      console.error("Connection error:", error);
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const disconnectWallet = () => {
+    setAddress(null);
+    setTokenBalance("0.00");
+  };
+
   const copyToClipboard = () => {
     navigator.clipboard.writeText(WYDA_CONTRACT);
     setCopied(true);
@@ -198,17 +272,12 @@ export default function App() {
   };
 
   const handleTumble = () => {
-    if (!isConnected) {
-      alert("Please connect your wallet first.");
+    if (!address) {
+      connectWallet();
       return;
     }
     setIsMixing(true);
     setTimeout(() => setIsMixing(false), 5000);
-  };
-
-  const connectWallet = () => {
-    setIsConnected(true);
-    setTokenBalance("1,250,000.00");
   };
 
   const solidityCode = `// SPDX-License-Identifier: MIT
@@ -241,7 +310,7 @@ contract WydaTumbler {
             <div className="w-10 h-10 bg-bnb-yellow rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(243,186,47,0.3)]">
               <ArrowRightLeft className="w-6 h-6 text-bnb-black" />
             </div>
-            <h1 className="text-xl font-bold font-display tracking-tight">WYDA<span className="text-bnb-yellow">.</span></h1>
+            <h1 className="text-xl font-bold font-display tracking-tight">Y'z <span className="text-bnb-yellow">thumb.</span></h1>
           </div>
 
           <nav className="space-y-1 flex-1">
@@ -298,16 +367,34 @@ contract WydaTumbler {
               <span className="text-xs font-bold text-bnb-yellow">$0.00004218</span>
               <span className="text-[10px] text-green-400 font-bold">+12.4%</span>
             </div>
-            <button 
-              onClick={connectWallet}
-              className={cn(
-                "px-6 py-2 font-bold rounded-full text-sm transition-all shadow-[0_0_15px_rgba(243,186,47,0.2)] flex items-center gap-2",
-                isConnected ? "bg-white/10 text-gray-100 border border-white/10" : "bg-bnb-yellow text-bnb-black hover:bg-bnb-yellow/90"
+            
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={address ? disconnectWallet : connectWallet}
+                disabled={isConnecting}
+                className={cn(
+                  "px-6 py-2 font-bold rounded-full text-sm transition-all shadow-[0_0_15px_rgba(243,186,47,0.2)] flex items-center gap-2",
+                  address ? "bg-white/10 text-gray-100 border border-white/10 hover:bg-white/20" : "bg-bnb-yellow text-bnb-black hover:bg-bnb-yellow/90"
+                )}
+              >
+                {isConnecting ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Wallet className="w-4 h-4" />
+                )}
+                {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Connect Wallet"}
+              </button>
+              
+              {address && (
+                <button 
+                  onClick={disconnectWallet}
+                  className="p-2 bg-white/5 hover:bg-red-500/10 text-gray-400 hover:text-red-400 rounded-full transition-colors"
+                  title="Disconnect"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
               )}
-            >
-              <Wallet className="w-4 h-4" />
-              {isConnected ? "0x71C...392" : "Connect Wallet"}
-            </button>
+            </div>
           </div>
         </header>
 
@@ -428,7 +515,7 @@ contract WydaTumbler {
             <div className="max-w-2xl mx-auto space-y-8 py-12">
               <div className="text-center space-y-4">
                 <h2 className="text-4xl font-bold font-display">Tumble Your WYDA</h2>
-                <p className="text-gray-400">Enhance your transaction privacy with the WYDA Tumbling Engine.</p>
+                <p className="text-gray-400">Enhance your transaction privacy with the Y'z thumb. Tumbling Engine.</p>
               </div>
 
               <div className="bg-bnb-dark/50 border border-white/10 rounded-3xl p-8 backdrop-blur-sm space-y-8 shadow-2xl">
@@ -500,7 +587,7 @@ contract WydaTumbler {
                   ) : (
                     <>
                       <Zap className="w-6 h-6" />
-                      Start Tumbling
+                      {address ? "Start Tumbling" : "Connect Wallet to Start"}
                     </>
                   )}
                 </button>
@@ -566,7 +653,7 @@ contract WydaTumbler {
                 <HelpCircle className="w-12 h-12 text-gray-600" />
               </div>
               <h3 className="text-xl font-bold font-display">Module Coming Soon</h3>
-              <p className="text-gray-500 max-w-xs text-center">We're working hard to bring you the full WYDA Tumbler experience. Stay tuned!</p>
+              <p className="text-gray-500 max-w-xs text-center">We're working hard to bring you the full Y'z thumb. experience. Stay tuned!</p>
             </div>
           )}
 
@@ -575,7 +662,7 @@ contract WydaTumbler {
         {/* Footer */}
         <footer className="mt-auto border-t border-white/5 p-8 text-center space-y-4">
           <p className="text-xs text-gray-500">
-            &copy; 2026 WYDA Ecosystem. Built for the BNB Smart Chain community.
+            &copy; 2026 Y'z thumb. Ecosystem. Built for the BNB Smart Chain community.
           </p>
           <div className="max-w-2xl mx-auto p-4 bg-red-500/5 border border-red-500/10 rounded-xl">
             <p className="text-[10px] text-red-400/80 leading-relaxed font-medium">
