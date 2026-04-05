@@ -47,6 +47,7 @@ import { bsc } from 'viem/chains';
 
 // Constants
 const WYDA_CONTRACT = "0xD84B7E8b295d9Fa9656527AC33Bf4F683aE7d2C4";
+const USDT_CONTRACT = "0x55d398326f99059fF775485246999027B3197955";
 const BSC_SCAN_URL = `https://bscscan.com/token/${WYDA_CONTRACT}`;
 
 interface Transaction {
@@ -92,15 +93,19 @@ const LegalDisclaimer = ({ className }: { className?: string }) => (
   </div>
 );
 
-const TumbleAnimation = () => {
+const TumbleAnimation = ({ selectedToken, isMixing }: { selectedToken: 'WYDA' | 'USDT', isMixing: boolean }) => {
   const [items, setItems] = useState<number[]>([]);
 
   useEffect(() => {
+    if (!isMixing) {
+      setItems([]);
+      return;
+    }
     const interval = setInterval(() => {
       setItems(prev => [...prev.slice(-5), Date.now()]);
-    }, 2000);
+    }, 1500);
     return () => clearInterval(interval);
-  }, []);
+  }, [isMixing]);
 
   return (
     <div className="relative h-64 w-full bg-bnb-black/40 rounded-2xl border border-white/5 overflow-hidden flex flex-col items-center justify-center">
@@ -110,30 +115,60 @@ const TumbleAnimation = () => {
       
       <div className="z-10 flex flex-col items-center gap-4">
         <motion.div 
-          animate={{ rotate: 360 }}
+          animate={isMixing ? { rotate: 360 } : {}}
           transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
-          className="p-4 rounded-full border-2 border-dashed border-bnb-yellow/30"
+          className={cn(
+            "p-4 rounded-full border-2 border-dashed transition-colors",
+            isMixing ? "border-bnb-yellow" : "border-white/10"
+          )}
         >
-          <div className="p-4 rounded-full bg-bnb-yellow/20">
-            <RefreshCw className="w-8 h-8 text-bnb-yellow" />
+          <div className={cn(
+            "p-4 rounded-full transition-colors",
+            isMixing ? "bg-bnb-yellow/20" : "bg-white/5"
+          )}>
+            <RefreshCw className={cn(
+              "w-8 h-8 transition-colors",
+              isMixing ? "text-bnb-yellow" : "text-gray-600"
+            )} />
           </div>
         </motion.div>
-        <p className="text-xs font-mono text-bnb-yellow/60 uppercase tracking-widest">Tumbling Engine Active</p>
+        <div className="text-center">
+          <p className={cn(
+            "text-xs font-mono uppercase tracking-widest transition-colors",
+            isMixing ? "text-bnb-yellow" : "text-gray-600"
+          )}>
+            {isMixing 
+              ? (selectedToken === 'USDT' ? "Swapping & Tumbling..." : "Tumbling Engine Active") 
+              : "Engine Standby"}
+          </p>
+          {isMixing && selectedToken === 'USDT' && (
+            <motion.p 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-[10px] text-green-400 mt-1 font-mono"
+            >
+              USDT (0x55d3...7955) → WYDA (0xD84B...d2C4)
+            </motion.p>
+          )}
+        </div>
       </div>
 
       <AnimatePresence>
-        {items.map((id) => (
+        {isMixing && items.map((id) => (
           <motion.div
             key={id}
             initial={{ y: -50, opacity: 0, scale: 0.5 }}
             animate={{ y: 300, opacity: [0, 1, 1, 0], scale: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 4, ease: "linear" }}
+            transition={{ duration: 3, ease: "linear" }}
             className="absolute top-0 left-1/2 -translate-x-1/2 flex flex-col items-center"
           >
-            <div className="w-3 h-3 rounded-full bg-bnb-yellow shadow-[0_0_10px_rgba(243,186,47,0.8)]" />
-            <div className="mt-2 text-[10px] font-mono text-bnb-yellow/40 whitespace-nowrap">
-              TX_{id.toString().slice(-4)}
+            <div className={cn(
+              "w-3 h-3 rounded-full shadow-[0_0_10px_rgba(243,186,47,0.8)]",
+              selectedToken === 'USDT' ? "bg-green-400" : "bg-bnb-yellow"
+            )} />
+            <div className="mt-2 text-[10px] font-mono text-white/40 whitespace-nowrap">
+              {selectedToken === 'USDT' ? `SWAP_${id.toString().slice(-4)}` : `TX_${id.toString().slice(-4)}`}
             </div>
           </motion.div>
         ))}
@@ -156,6 +191,9 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMixing, setIsMixing] = useState(false);
   const [tokenBalance, setTokenBalance] = useState<string>("0.00");
+  const [usdtBalance, setUsdtBalance] = useState<string>("0.00");
+  const [selectedToken, setSelectedToken] = useState<'WYDA' | 'USDT'>('WYDA');
+  const [tumbleAmount, setTumbleAmount] = useState<string>("");
   const [address, setAddress] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   
@@ -226,14 +264,25 @@ export default function App() {
         }
       ] as const;
 
-      const balance = await publicClient.readContract({
+      // Fetch WYDA Balance
+      const wydaBalance = await publicClient.readContract({
         address: WYDA_CONTRACT as `0x${string}`,
         abi,
         functionName: 'balanceOf',
         args: [userAddress as `0x${string}`]
       } as any) as bigint;
       
-      setTokenBalance(new Intl.NumberFormat().format(Number(formatUnits(balance, 18))));
+      setTokenBalance(new Intl.NumberFormat().format(Number(formatUnits(wydaBalance, 18))));
+
+      // Fetch USDT Balance
+      const usdtBalance = await publicClient.readContract({
+        address: USDT_CONTRACT as `0x${string}`,
+        abi,
+        functionName: 'balanceOf',
+        args: [userAddress as `0x${string}`]
+      } as any) as bigint;
+      
+      setUsdtBalance(new Intl.NumberFormat().format(Number(formatUnits(usdtBalance, 18))));
     } catch (e) {
       console.error("Error fetching balance:", e);
     }
@@ -277,8 +326,15 @@ export default function App() {
       connectWallet();
       return;
     }
+    if (!tumbleAmount || isNaN(Number(tumbleAmount))) {
+      return;
+    }
     setIsMixing(true);
-    setTimeout(() => setIsMixing(false), 5000);
+    // Mock mixing process
+    setTimeout(() => {
+      setIsMixing(false);
+      setTumbleAmount("");
+    }, 6000);
   };
 
   const solidityCode = `// SPDX-License-Identifier: MIT
@@ -575,25 +631,65 @@ contract WydaTumbler {
           {activeTab === 'tumble' && (
             <div className="max-w-2xl mx-auto space-y-8 py-12">
               <div className="text-center space-y-4">
-                <h2 className="text-4xl font-bold font-display">Tumble Your WYDA</h2>
+                <h2 className="text-4xl font-bold font-display">Tumble Your Assets</h2>
                 <p className="text-gray-400">Enhance your transaction privacy with the Y'z thumb. Tumbling Engine.</p>
               </div>
 
               <div className="bg-bnb-dark/50 border border-white/10 rounded-3xl p-8 backdrop-blur-sm space-y-8 shadow-2xl">
                 <div className="space-y-4">
                   <div className="flex justify-between items-end">
-                    <label className="text-sm font-bold text-gray-400 uppercase tracking-widest">Amount to Tumble</label>
-                    <span className="text-xs text-gray-500 font-mono">Balance: {tokenBalance} WYDA</span>
+                    <label className="text-sm font-bold text-gray-400 uppercase tracking-widest">Select Token & Amount</label>
+                    <span className="text-xs text-gray-500 font-mono">
+                      Balance: {selectedToken === 'WYDA' ? tokenBalance : usdtBalance} {selectedToken}
+                    </span>
                   </div>
+                  
+                  <div className="flex gap-4 mb-2">
+                    <button 
+                      onClick={() => setSelectedToken('WYDA')}
+                      className={cn(
+                        "flex-1 py-3 rounded-xl border font-bold transition-all flex items-center justify-center gap-2",
+                        selectedToken === 'WYDA' 
+                          ? "bg-bnb-yellow/10 border-bnb-yellow text-bnb-yellow" 
+                          : "bg-white/5 border-white/5 text-gray-400 hover:bg-white/10"
+                      )}
+                    >
+                      <Coins className="w-4 h-4" />
+                      WYDA
+                    </button>
+                    <button 
+                      onClick={() => setSelectedToken('USDT')}
+                      className={cn(
+                        "flex-1 py-3 rounded-xl border font-bold transition-all flex items-center justify-center gap-2",
+                        selectedToken === 'USDT' 
+                          ? "bg-green-500/10 border-green-500 text-green-400" 
+                          : "bg-white/5 border-white/5 text-gray-400 hover:bg-white/10"
+                      )}
+                    >
+                      <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-[8px] text-white font-bold">$</div>
+                      USDT
+                    </button>
+                  </div>
+
                   <div className="relative">
                     <input 
                       type="text" 
                       placeholder="0.00"
+                      value={tumbleAmount}
+                      onChange={(e) => setTumbleAmount(e.target.value)}
                       className="w-full bg-bnb-black/50 border border-white/10 rounded-2xl p-6 text-2xl font-display focus:outline-none focus:border-bnb-yellow/50 transition-colors"
                     />
                     <div className="absolute right-6 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                      <span className="text-bnb-yellow font-bold">WYDA</span>
-                      <button className="px-2 py-1 bg-bnb-yellow/10 text-bnb-yellow text-[10px] font-bold rounded uppercase">Max</button>
+                      <span className={cn(
+                        "font-bold",
+                        selectedToken === 'WYDA' ? "text-bnb-yellow" : "text-green-400"
+                      )}>{selectedToken}</span>
+                      <button 
+                        onClick={() => setTumbleAmount(selectedToken === 'WYDA' ? tokenBalance.replace(/,/g, '') : usdtBalance.replace(/,/g, ''))}
+                        className="px-2 py-1 bg-white/10 text-gray-300 text-[10px] font-bold rounded uppercase hover:bg-white/20 transition-colors"
+                      >
+                        Max
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -613,7 +709,26 @@ contract WydaTumbler {
                   />
                 </div>
 
-                <TumbleAnimation />
+                {selectedToken === 'USDT' && (
+                  <div className="p-4 bg-green-500/5 border border-green-500/10 rounded-2xl space-y-2">
+                    <div className="flex items-center gap-2 text-green-400">
+                      <ArrowRightLeft className="w-4 h-4" />
+                      <span className="text-xs font-bold uppercase tracking-wider">Conversion Protocol</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 text-[10px]">
+                      <div className="space-y-1">
+                        <p className="text-gray-500 uppercase">Input Asset</p>
+                        <p className="text-gray-300 font-mono truncate">USDT (0x55d3...7955)</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-gray-500 uppercase">Output Asset</p>
+                        <p className="text-bnb-yellow font-mono truncate">WYDA (0xD84B...d2C4)</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <TumbleAnimation selectedToken={selectedToken} isMixing={isMixing} />
 
                 <div className="p-6 bg-bnb-yellow/5 rounded-2xl border border-bnb-yellow/10 space-y-3">
                   <div className="flex justify-between text-sm">
@@ -626,8 +741,19 @@ contract WydaTumbler {
                   </div>
                   <div className="pt-3 border-t border-white/5 flex justify-between font-bold">
                     <span>Total Output</span>
-                    <span className="text-bnb-yellow">0.00 WYDA</span>
+                    <span className="text-bnb-yellow">
+                      {tumbleAmount ? (
+                        selectedToken === 'WYDA' 
+                          ? `${(Number(tumbleAmount) * 0.999).toFixed(2)} WYDA`
+                          : `${(Number(tumbleAmount) * 23700 * 0.999).toFixed(0)} WYDA`
+                      ) : "0.00 WYDA"}
+                    </span>
                   </div>
+                  {selectedToken === 'USDT' && (
+                    <div className="text-[10px] text-gray-500 text-right">
+                      Rate: 1 USDT ≈ 23,700 WYDA
+                    </div>
+                  )}
                 </div>
 
                 <button 
@@ -643,12 +769,14 @@ contract WydaTumbler {
                   {isMixing ? (
                     <>
                       <RefreshCw className="w-6 h-6 animate-spin" />
-                      Tumbling in Progress...
+                      {selectedToken === 'USDT' ? "Swapping & Tumbling..." : "Tumbling in Progress..."}
                     </>
                   ) : (
                     <>
                       <Zap className="w-6 h-6" />
-                      {address ? "Start Tumbling" : "Connect Wallet to Start"}
+                      {address 
+                        ? (selectedToken === 'USDT' ? "Swap & Tumble" : "Start Tumbling") 
+                        : "Connect Wallet to Start"}
                     </>
                   )}
                 </button>
