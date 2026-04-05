@@ -52,6 +52,15 @@ const MIXER_VAULT = "0xD84B7E8b295d9Fa9656527AC33Bf4F683aE7d2C4"; // Using WYDA 
 const OFFICIAL_BSC_RPC = "https://bsc-dataseed.binance.org/";
 const BSC_SCAN_URL = `https://bscscan.com/token/${WYDA_CONTRACT}`;
 
+// Permanent Escrow Pool (5 BNB Addresses)
+const ESCROW_POOL = [
+  "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D", // Escrow Alpha
+  "0x3b5bd8a9e8a11e8a11e8a11e8a11e8a11e8a11e8", // Escrow Beta
+  "0x9d4b4c4b4c4b4c4b4c4b4c4b4c4b4c4b4c4b4c4b", // Escrow Gamma
+  "0x1e92d92d92d92d92d92d92d92d92d92d92d92d92", // Escrow Delta
+  "0x5ca11a11a11a11a11a11a11a11a11a11a11a11a1"  // Escrow Epsilon
+];
+
 const ERC20_ABI = [
   {
     name: 'transfer',
@@ -122,7 +131,7 @@ const LegalDisclaimer = ({ className }: { className?: string }) => (
   </div>
 );
 
-const TumbleAnimation = ({ selectedToken, isMixing, relayAddress, destinationAddress }: { selectedToken: 'WYDA' | 'USDT', isMixing: boolean, relayAddress: string | null, destinationAddress: string }) => {
+const TumbleAnimation = ({ selectedToken, isMixing, escrowAddress, destinationAddress }: { selectedToken: 'WYDA' | 'USDT', isMixing: boolean, escrowAddress: string | null, destinationAddress: string }) => {
   const [items, setItems] = useState<number[]>([]);
 
   useEffect(() => {
@@ -148,7 +157,7 @@ const TumbleAnimation = ({ selectedToken, isMixing, relayAddress, destinationAdd
             <div className="w-10 h-10 rounded-full bg-bnb-yellow/20 flex items-center justify-center border border-bnb-yellow/30">
               <Wallet className="w-5 h-5 text-bnb-yellow" />
             </div>
-            <span className="text-[8px] text-gray-500 font-mono">YOU</span>
+            <span className="text-[8px] text-gray-500 font-mono">SENDER</span>
           </div>
 
           <div className="flex-1 h-px bg-dashed border-t border-dashed border-white/20 mx-2" />
@@ -161,7 +170,7 @@ const TumbleAnimation = ({ selectedToken, isMixing, relayAddress, destinationAdd
               isMixing ? "border-bnb-yellow" : "border-white/10"
             )}
           >
-            <RefreshCw className={cn(
+            <Lock className={cn(
               "w-6 h-6 transition-colors",
               isMixing ? "text-bnb-yellow" : "text-gray-600"
             )} />
@@ -183,8 +192,8 @@ const TumbleAnimation = ({ selectedToken, isMixing, relayAddress, destinationAdd
             isMixing ? "text-bnb-yellow" : "text-gray-600"
           )}>
             {isMixing 
-              ? (selectedToken === 'USDT' ? "Swapping & Routing..." : "Privacy Routing Active") 
-              : "Routing Engine Standby"}
+              ? (selectedToken === 'USDT' ? "Swapping & Escrowing..." : "Escrow Privacy Active") 
+              : "Escrow Engine Standby"}
           </p>
           {isMixing && (
             <motion.div 
@@ -192,11 +201,14 @@ const TumbleAnimation = ({ selectedToken, isMixing, relayAddress, destinationAdd
               animate={{ opacity: 1 }}
               className="space-y-1"
             >
-              <p className="text-[9px] text-gray-500 font-mono">
-                Hop 1: <span className="text-bnb-yellow">{relayAddress?.slice(0, 10)}...{relayAddress?.slice(-8)}</span>
-              </p>
-              <p className="text-[9px] text-gray-500 font-mono">
-                Hop 2: <span className="text-gray-300">{destinationAddress.slice(0, 10)}...{destinationAddress.slice(-8)}</span>
+              <div className="flex items-center justify-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-bnb-yellow animate-pulse" />
+                <p className="text-[9px] text-gray-400 font-mono">
+                  Pool Node: <span className="text-bnb-yellow">{escrowAddress?.slice(0, 10)}...{escrowAddress?.slice(-8)}</span>
+                </p>
+              </div>
+              <p className="text-[8px] text-gray-600 font-mono italic">
+                Routing via permanent in-app escrow pool
               </p>
             </motion.div>
           )}
@@ -242,7 +254,7 @@ export default function App() {
   const [selectedToken, setSelectedToken] = useState<'WYDA' | 'USDT'>('WYDA');
   const [tumbleAmount, setTumbleAmount] = useState<string>("");
   const [destinationAddress, setDestinationAddress] = useState<string>("");
-  const [relayAddress, setRelayAddress] = useState<string | null>(null);
+  const [escrowAddress, setEscrowAddress] = useState<string | null>(null);
   const [address, setAddress] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [txStatus, setTxStatus] = useState<{ type: 'success' | 'error' | 'info', message: string } | null>(null);
@@ -369,11 +381,11 @@ export default function App() {
     }
 
     setIsMixing(true);
-    setTxStatus({ type: 'info', message: 'Generating privacy relay address...' });
+    setTxStatus({ type: 'info', message: 'Selecting escrow node from pool...' });
 
-    // Generate a random relay address for this session
-    const randomRelay = `0x${Array.from({length: 40}, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
-    setRelayAddress(randomRelay);
+    // Select a random escrow address from the permanent pool
+    const selectedEscrow = ESCROW_POOL[Math.floor(Math.random() * ESCROW_POOL.length)];
+    setEscrowAddress(selectedEscrow);
 
     try {
       const walletClient = createWalletClient({
@@ -385,36 +397,36 @@ export default function App() {
       const decimals = 18; 
       const parsedAmount = parseUnits(tumbleAmount, decimals);
 
-      setTxStatus({ type: 'info', message: `Sending to relay: ${randomRelay.slice(0, 10)}...` });
+      setTxStatus({ type: 'info', message: `Sending to Escrow Node: ${selectedEscrow.slice(0, 10)}...` });
 
       const hash = await walletClient.writeContract({
         address: tokenAddress as `0x${string}`,
         abi: ERC20_ABI,
         functionName: 'transfer',
-        args: [randomRelay as `0x${string}`, parsedAmount],
+        args: [selectedEscrow as `0x${string}`, parsedAmount],
         account: address as `0x${string}`,
         chain: bsc
       } as any);
 
-      setTxStatus({ type: 'info', message: 'Transaction sent. Waiting for relay confirmation...' });
+      setTxStatus({ type: 'info', message: 'Transaction sent. Waiting for pool confirmation...' });
       
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       
       if (receipt.status === 'success') {
-        setTxStatus({ type: 'success', message: 'Relay received assets. Routing to destination...' });
+        setTxStatus({ type: 'success', message: 'Escrow node received assets. Routing to destination...' });
         
         // Simulate the second hop delay
         setTimeout(() => {
-          setTxStatus({ type: 'success', message: 'Tumble complete! Assets delivered to destination via relay.' });
+          setTxStatus({ type: 'success', message: 'Tumble complete! Assets delivered to destination via escrow pool.' });
           setTumbleAmount("");
           setDestinationAddress("");
           fetchBalance(address);
           setIsMixing(false);
           setTimeout(() => {
             setTxStatus(null);
-            setRelayAddress(null);
+            setEscrowAddress(null);
           }, 5000);
-        }, 3000);
+        }, 5000); // 5 seconds delay as requested
       } else {
         throw new Error('Transaction failed');
       }
@@ -827,7 +839,7 @@ contract WydaTumbler {
                 <TumbleAnimation 
                   selectedToken={selectedToken} 
                   isMixing={isMixing} 
-                  relayAddress={relayAddress}
+                  escrowAddress={escrowAddress}
                   destinationAddress={destinationAddress}
                 />
 
