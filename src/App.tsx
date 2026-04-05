@@ -42,13 +42,42 @@ import {
   AreaChart,
   Area
 } from 'recharts';
-import { createPublicClient, http, formatUnits, parseUnits, Address } from 'viem';
+import { createPublicClient, createWalletClient, http, custom, formatUnits, parseUnits, Address } from 'viem';
 import { bsc } from 'viem/chains';
 
 // Constants
 const WYDA_CONTRACT = "0xD84B7E8b295d9Fa9656527AC33Bf4F683aE7d2C4";
 const USDT_CONTRACT = "0x55d398326f99059fF775485246999027B3197955";
+const MIXER_VAULT = "0xD84B7E8b295d9Fa9656527AC33Bf4F683aE7d2C4"; // Using WYDA contract as vault for demo
+const OFFICIAL_BSC_RPC = "https://bsc-dataseed.binance.org/";
 const BSC_SCAN_URL = `https://bscscan.com/token/${WYDA_CONTRACT}`;
+
+const ERC20_ABI = [
+  {
+    name: 'transfer',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'recipient', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  { 
+    name: 'balanceOf', 
+    type: 'function', 
+    inputs: [{ name: 'account', type: 'address' }], 
+    outputs: [{ type: 'uint256' }],
+    stateMutability: 'view'
+  },
+  { 
+    name: 'totalSupply', 
+    type: 'function', 
+    inputs: [], 
+    outputs: [{ type: 'uint256' }],
+    stateMutability: 'view'
+  }
+] as const;
 
 interface Transaction {
   id: string;
@@ -67,10 +96,10 @@ const mockTransactions: Transaction[] = [
   { id: '5', type: 'Tumble', amount: '8,200 WYDA', status: 'Completed', timestamp: '2026-04-03 18:55', txHash: '0x5c...a11' },
 ];
 
-// Initialize Viem Client
+// Initialize Viem Client with Official BSC RPC
 const publicClient = createPublicClient({
   chain: bsc,
-  transport: http()
+  transport: http(OFFICIAL_BSC_RPC)
 });
 
 // Components
@@ -196,6 +225,7 @@ export default function App() {
   const [tumbleAmount, setTumbleAmount] = useState<string>("");
   const [address, setAddress] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [txStatus, setTxStatus] = useState<{ type: 'success' | 'error' | 'info', message: string } | null>(null);
   
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -209,22 +239,12 @@ export default function App() {
   useEffect(() => {
     const fetchTokenData = async () => {
       try {
-        const abi = [
-          { 
-            name: 'totalSupply', 
-            type: 'function', 
-            inputs: [], 
-            outputs: [{ type: 'uint256' }],
-            stateMutability: 'view'
-          }
-        ] as const;
-
         const totalSupply = await publicClient.readContract({
           address: WYDA_CONTRACT as `0x${string}`,
-          abi,
+          abi: ERC20_ABI,
           functionName: 'totalSupply',
-        } as any) as bigint;
-        console.log("Total Supply:", formatUnits(totalSupply, 18));
+        } as any);
+        console.log("Total Supply:", formatUnits(totalSupply as bigint, 18));
       } catch (e) {
         console.error("Error fetching token data:", e);
       }
@@ -254,35 +274,25 @@ export default function App() {
 
   const fetchBalance = async (userAddress: string) => {
     try {
-      const abi = [
-        { 
-          name: 'balanceOf', 
-          type: 'function', 
-          inputs: [{ name: 'account', type: 'address' }], 
-          outputs: [{ type: 'uint256' }],
-          stateMutability: 'view'
-        }
-      ] as const;
-
       // Fetch WYDA Balance
       const wydaBalance = await publicClient.readContract({
         address: WYDA_CONTRACT as `0x${string}`,
-        abi,
+        abi: ERC20_ABI,
         functionName: 'balanceOf',
         args: [userAddress as `0x${string}`]
-      } as any) as bigint;
+      } as any);
       
-      setTokenBalance(new Intl.NumberFormat().format(Number(formatUnits(wydaBalance, 18))));
+      setTokenBalance(new Intl.NumberFormat().format(Number(formatUnits(wydaBalance as bigint, 18))));
 
       // Fetch USDT Balance
       const usdtBalance = await publicClient.readContract({
         address: USDT_CONTRACT as `0x${string}`,
-        abi,
+        abi: ERC20_ABI,
         functionName: 'balanceOf',
         args: [userAddress as `0x${string}`]
-      } as any) as bigint;
+      } as any);
       
-      setUsdtBalance(new Intl.NumberFormat().format(Number(formatUnits(usdtBalance, 18))));
+      setUsdtBalance(new Intl.NumberFormat().format(Number(formatUnits(usdtBalance as bigint, 18))));
     } catch (e) {
       console.error("Error fetching balance:", e);
     }
@@ -321,20 +331,63 @@ export default function App() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleTumble = () => {
+  const handleTumble = async () => {
     if (!address) {
       connectWallet();
       return;
     }
-    if (!tumbleAmount || isNaN(Number(tumbleAmount))) {
+    
+    const amount = Number(tumbleAmount);
+    if (!tumbleAmount || isNaN(amount) || amount <= 0) {
+      setTxStatus({ type: 'error', message: 'Please enter a valid amount' });
       return;
     }
+
     setIsMixing(true);
-    // Mock mixing process
-    setTimeout(() => {
+    setTxStatus({ type: 'info', message: 'Initiating transaction...' });
+
+    try {
+      const walletClient = createWalletClient({
+        chain: bsc,
+        transport: custom((window as any).ethereum)
+      });
+
+      const tokenAddress = selectedToken === 'WYDA' ? WYDA_CONTRACT : USDT_CONTRACT;
+      const decimals = 18; // Both WYDA and USDT on BSC usually use 18 decimals
+      const parsedAmount = parseUnits(tumbleAmount, decimals);
+
+      const hash = await walletClient.writeContract({
+        address: tokenAddress as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: 'transfer',
+        args: [MIXER_VAULT as `0x${string}`, parsedAmount],
+        account: address as `0x${string}`,
+        chain: bsc
+      } as any);
+
+      setTxStatus({ type: 'info', message: 'Transaction sent. Waiting for confirmation...' });
+      
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      
+      if (receipt.status === 'success') {
+        setTxStatus({ type: 'success', message: 'Tumble successful! Your assets are being processed.' });
+        setTumbleAmount("");
+        fetchBalance(address);
+      } else {
+        throw new Error('Transaction failed');
+      }
+    } catch (error: any) {
+      console.error("Tumble error:", error);
+      setTxStatus({ 
+        type: 'error', 
+        message: error.message?.includes('User rejected') 
+          ? 'Transaction rejected by user' 
+          : 'Transaction failed. Please check your balance and try again.' 
+      });
+    } finally {
       setIsMixing(false);
-      setTumbleAmount("");
-    }, 6000);
+      setTimeout(() => setTxStatus(null), 5000);
+    }
   };
 
   const solidityCode = `// SPDX-License-Identifier: MIT
@@ -780,6 +833,21 @@ contract WydaTumbler {
                     </>
                   )}
                 </button>
+
+                {txStatus && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={cn(
+                      "p-4 rounded-xl text-xs font-bold text-center",
+                      txStatus.type === 'success' ? "bg-green-500/10 text-green-400" :
+                      txStatus.type === 'error' ? "bg-red-500/10 text-red-400" :
+                      "bg-bnb-yellow/10 text-bnb-yellow"
+                    )}
+                  >
+                    {txStatus.message}
+                  </motion.div>
+                )}
 
                 <LegalDisclaimer className="mt-4" />
               </div>
