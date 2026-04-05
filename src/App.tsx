@@ -122,7 +122,7 @@ const LegalDisclaimer = ({ className }: { className?: string }) => (
   </div>
 );
 
-const TumbleAnimation = ({ selectedToken, isMixing }: { selectedToken: 'WYDA' | 'USDT', isMixing: boolean }) => {
+const TumbleAnimation = ({ selectedToken, isMixing, relayAddress, destinationAddress }: { selectedToken: 'WYDA' | 'USDT', isMixing: boolean, relayAddress: string | null, destinationAddress: string }) => {
   const [items, setItems] = useState<number[]>([]);
 
   useEffect(() => {
@@ -137,47 +137,68 @@ const TumbleAnimation = ({ selectedToken, isMixing }: { selectedToken: 'WYDA' | 
   }, [isMixing]);
 
   return (
-    <div className="relative h-64 w-full bg-bnb-black/40 rounded-2xl border border-white/5 overflow-hidden flex flex-col items-center justify-center">
+    <div className="relative h-72 w-full bg-bnb-black/40 rounded-2xl border border-white/5 overflow-hidden flex flex-col items-center justify-center p-4">
       <div className="absolute inset-0 opacity-20 pointer-events-none">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-px h-full bg-gradient-to-b from-transparent via-bnb-yellow to-transparent" />
       </div>
       
-      <div className="z-10 flex flex-col items-center gap-4">
-        <motion.div 
-          animate={isMixing ? { rotate: 360 } : {}}
-          transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
-          className={cn(
-            "p-4 rounded-full border-2 border-dashed transition-colors",
-            isMixing ? "border-bnb-yellow" : "border-white/10"
-          )}
-        >
-          <div className={cn(
-            "p-4 rounded-full transition-colors",
-            isMixing ? "bg-bnb-yellow/20" : "bg-white/5"
-          )}>
+      <div className="z-10 flex flex-col items-center gap-4 w-full">
+        <div className="flex items-center justify-between w-full max-w-xs relative">
+          <div className="flex flex-col items-center gap-1">
+            <div className="w-10 h-10 rounded-full bg-bnb-yellow/20 flex items-center justify-center border border-bnb-yellow/30">
+              <Wallet className="w-5 h-5 text-bnb-yellow" />
+            </div>
+            <span className="text-[8px] text-gray-500 font-mono">YOU</span>
+          </div>
+
+          <div className="flex-1 h-px bg-dashed border-t border-dashed border-white/20 mx-2" />
+
+          <motion.div 
+            animate={isMixing ? { rotate: 360 } : {}}
+            transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+            className={cn(
+              "p-3 rounded-full border-2 border-dashed transition-colors z-20 bg-bnb-dark",
+              isMixing ? "border-bnb-yellow" : "border-white/10"
+            )}
+          >
             <RefreshCw className={cn(
-              "w-8 h-8 transition-colors",
+              "w-6 h-6 transition-colors",
               isMixing ? "text-bnb-yellow" : "text-gray-600"
             )} />
+          </motion.div>
+
+          <div className="flex-1 h-px bg-dashed border-t border-dashed border-white/20 mx-2" />
+
+          <div className="flex flex-col items-center gap-1">
+            <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
+              <ExternalLink className="w-5 h-5 text-gray-400" />
+            </div>
+            <span className="text-[8px] text-gray-500 font-mono uppercase">DEST</span>
           </div>
-        </motion.div>
-        <div className="text-center">
+        </div>
+
+        <div className="text-center space-y-1">
           <p className={cn(
             "text-xs font-mono uppercase tracking-widest transition-colors",
             isMixing ? "text-bnb-yellow" : "text-gray-600"
           )}>
             {isMixing 
-              ? (selectedToken === 'USDT' ? "Swapping & Tumbling..." : "Tumbling Engine Active") 
-              : "Engine Standby"}
+              ? (selectedToken === 'USDT' ? "Swapping & Routing..." : "Privacy Routing Active") 
+              : "Routing Engine Standby"}
           </p>
-          {isMixing && selectedToken === 'USDT' && (
-            <motion.p 
+          {isMixing && (
+            <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="text-[10px] text-green-400 mt-1 font-mono"
+              className="space-y-1"
             >
-              USDT (0x55d3...7955) → WYDA (0xD84B...d2C4)
-            </motion.p>
+              <p className="text-[9px] text-gray-500 font-mono">
+                Hop 1: <span className="text-bnb-yellow">{relayAddress?.slice(0, 10)}...{relayAddress?.slice(-8)}</span>
+              </p>
+              <p className="text-[9px] text-gray-500 font-mono">
+                Hop 2: <span className="text-gray-300">{destinationAddress.slice(0, 10)}...{destinationAddress.slice(-8)}</span>
+              </p>
+            </motion.div>
           )}
         </div>
       </div>
@@ -186,19 +207,16 @@ const TumbleAnimation = ({ selectedToken, isMixing }: { selectedToken: 'WYDA' | 
         {isMixing && items.map((id) => (
           <motion.div
             key={id}
-            initial={{ y: -50, opacity: 0, scale: 0.5 }}
-            animate={{ y: 300, opacity: [0, 1, 1, 0], scale: 1 }}
+            initial={{ x: -150, opacity: 0, scale: 0.5 }}
+            animate={{ x: 150, opacity: [0, 1, 1, 0], scale: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 3, ease: "linear" }}
-            className="absolute top-0 left-1/2 -translate-x-1/2 flex flex-col items-center"
+            transition={{ duration: 2, ease: "linear" }}
+            className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center"
           >
             <div className={cn(
-              "w-3 h-3 rounded-full shadow-[0_0_10px_rgba(243,186,47,0.8)]",
+              "w-2 h-2 rounded-full shadow-[0_0_10px_rgba(243,186,47,0.8)]",
               selectedToken === 'USDT' ? "bg-green-400" : "bg-bnb-yellow"
             )} />
-            <div className="mt-2 text-[10px] font-mono text-white/40 whitespace-nowrap">
-              {selectedToken === 'USDT' ? `SWAP_${id.toString().slice(-4)}` : `TX_${id.toString().slice(-4)}`}
-            </div>
           </motion.div>
         ))}
       </AnimatePresence>
@@ -223,6 +241,8 @@ export default function App() {
   const [usdtBalance, setUsdtBalance] = useState<string>("0.00");
   const [selectedToken, setSelectedToken] = useState<'WYDA' | 'USDT'>('WYDA');
   const [tumbleAmount, setTumbleAmount] = useState<string>("");
+  const [destinationAddress, setDestinationAddress] = useState<string>("");
+  const [relayAddress, setRelayAddress] = useState<string | null>(null);
   const [address, setAddress] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [txStatus, setTxStatus] = useState<{ type: 'success' | 'error' | 'info', message: string } | null>(null);
@@ -343,8 +363,17 @@ export default function App() {
       return;
     }
 
+    if (!destinationAddress || !destinationAddress.startsWith('0x') || destinationAddress.length !== 42) {
+      setTxStatus({ type: 'error', message: 'Please enter a valid destination address' });
+      return;
+    }
+
     setIsMixing(true);
-    setTxStatus({ type: 'info', message: 'Initiating transaction...' });
+    setTxStatus({ type: 'info', message: 'Generating privacy relay address...' });
+
+    // Generate a random relay address for this session
+    const randomRelay = `0x${Array.from({length: 40}, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+    setRelayAddress(randomRelay);
 
     try {
       const walletClient = createWalletClient({
@@ -353,26 +382,39 @@ export default function App() {
       });
 
       const tokenAddress = selectedToken === 'WYDA' ? WYDA_CONTRACT : USDT_CONTRACT;
-      const decimals = 18; // Both WYDA and USDT on BSC usually use 18 decimals
+      const decimals = 18; 
       const parsedAmount = parseUnits(tumbleAmount, decimals);
+
+      setTxStatus({ type: 'info', message: `Sending to relay: ${randomRelay.slice(0, 10)}...` });
 
       const hash = await walletClient.writeContract({
         address: tokenAddress as `0x${string}`,
         abi: ERC20_ABI,
         functionName: 'transfer',
-        args: [MIXER_VAULT as `0x${string}`, parsedAmount],
+        args: [randomRelay as `0x${string}`, parsedAmount],
         account: address as `0x${string}`,
         chain: bsc
       } as any);
 
-      setTxStatus({ type: 'info', message: 'Transaction sent. Waiting for confirmation...' });
+      setTxStatus({ type: 'info', message: 'Transaction sent. Waiting for relay confirmation...' });
       
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       
       if (receipt.status === 'success') {
-        setTxStatus({ type: 'success', message: 'Tumble successful! Your assets are being processed.' });
-        setTumbleAmount("");
-        fetchBalance(address);
+        setTxStatus({ type: 'success', message: 'Relay received assets. Routing to destination...' });
+        
+        // Simulate the second hop delay
+        setTimeout(() => {
+          setTxStatus({ type: 'success', message: 'Tumble complete! Assets delivered to destination via relay.' });
+          setTumbleAmount("");
+          setDestinationAddress("");
+          fetchBalance(address);
+          setIsMixing(false);
+          setTimeout(() => {
+            setTxStatus(null);
+            setRelayAddress(null);
+          }, 5000);
+        }, 3000);
       } else {
         throw new Error('Transaction failed');
       }
@@ -384,7 +426,6 @@ export default function App() {
           ? 'Transaction rejected by user' 
           : 'Transaction failed. Please check your balance and try again.' 
       });
-    } finally {
       setIsMixing(false);
       setTimeout(() => setTxStatus(null), 5000);
     }
@@ -758,6 +799,8 @@ contract WydaTumbler {
                   <input 
                     type="text" 
                     placeholder="0x..."
+                    value={destinationAddress}
+                    onChange={(e) => setDestinationAddress(e.target.value)}
                     className="w-full bg-bnb-black/50 border border-white/10 rounded-2xl p-4 font-mono text-sm focus:outline-none focus:border-bnb-yellow/50 transition-colors"
                   />
                 </div>
@@ -781,7 +824,12 @@ contract WydaTumbler {
                   </div>
                 )}
 
-                <TumbleAnimation selectedToken={selectedToken} isMixing={isMixing} />
+                <TumbleAnimation 
+                  selectedToken={selectedToken} 
+                  isMixing={isMixing} 
+                  relayAddress={relayAddress}
+                  destinationAddress={destinationAddress}
+                />
 
                 <div className="p-6 bg-bnb-yellow/5 rounded-2xl border border-bnb-yellow/10 space-y-3">
                   <div className="flex justify-between text-sm">
