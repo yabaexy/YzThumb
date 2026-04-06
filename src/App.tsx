@@ -52,14 +52,20 @@ const MIXER_VAULT = "0xD84B7E8b295d9Fa9656527AC33Bf4F683aE7d2C4"; // Using WYDA 
 const OFFICIAL_BSC_RPC = "https://bsc-dataseed.binance.org/";
 const BSC_SCAN_URL = `https://bscscan.com/token/${WYDA_CONTRACT}`;
 
-// Permanent Escrow Pool (5 BNB Addresses)
-const ESCROW_POOL = [
-  "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D", // Escrow Alpha
-  "0x3b5bd8a9e8a11e8a11e8a11e8a11e8a11e8a11e8", // Escrow Beta
-  "0x9d4b4c4b4c4b4c4b4c4b4c4b4c4b4c4b4c4b4c4b", // Escrow Gamma
-  "0x1e92d92d92d92d92d92d92d92d92d92d92d92d92", // Escrow Delta
-  "0x5ca11a11a11a11a11a11a11a11a11a11a11a11a1"  // Escrow Epsilon
+const ESCROW_ADDRESSES = [
+  "0x01017f9F1a27E3E5CfEa61001181e2e31e237845",
+  "0x52235F46fD055ed41855d865410a68c75936801d",
+  "0x8E8c51b1fd6a0c76c1Fc1d877d962e99af7E5016",
+  "0x81f63e8de95FD0acC9B9c6f38481B8E9FdAb000b",
+  "0x7A4C0fd9708798a1D7e1Bd27A6C902C9Ba033a75"
 ];
+
+const REQUEST_EMAIL = "loopyfy@proton.me";
+
+const LIMITS = {
+  WYDA: 50000,
+  USDT: 1000
+};
 
 const ERC20_ABI = [
   {
@@ -204,11 +210,11 @@ const TumbleAnimation = ({ selectedToken, isMixing, escrowAddress, destinationAd
               <div className="flex items-center justify-center gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-bnb-yellow animate-pulse" />
                 <p className="text-[9px] text-gray-400 font-mono">
-                  Pool Node: <span className="text-bnb-yellow">{escrowAddress?.slice(0, 10)}...{escrowAddress?.slice(-8)}</span>
+                  Escrow: <span className="text-bnb-yellow">{escrowAddress?.slice(0, 10)}...{escrowAddress?.slice(-8)}</span>
                 </p>
               </div>
               <p className="text-[8px] text-gray-600 font-mono italic">
-                Routing via permanent in-app escrow pool
+                Temporary privacy hop generated in-app
               </p>
             </motion.div>
           )}
@@ -375,17 +381,23 @@ export default function App() {
       return;
     }
 
+    const limit = selectedToken === 'WYDA' ? LIMITS.WYDA : LIMITS.USDT;
+    if (amount > limit) {
+      setTxStatus({ type: 'error', message: `Amount exceeds limit of ${limit.toLocaleString()} ${selectedToken}` });
+      return;
+    }
+
     if (!destinationAddress || !destinationAddress.startsWith('0x') || destinationAddress.length !== 42) {
       setTxStatus({ type: 'error', message: 'Please enter a valid destination address' });
       return;
     }
 
     setIsMixing(true);
-    setTxStatus({ type: 'info', message: 'Selecting escrow node from pool...' });
+    setTxStatus({ type: 'info', message: 'Selecting privacy escrow address...' });
 
-    // Select a random escrow address from the permanent pool
-    const selectedEscrow = ESCROW_POOL[Math.floor(Math.random() * ESCROW_POOL.length)];
-    setEscrowAddress(selectedEscrow);
+    // Pick one of the 5 specific escrow addresses
+    const randomEscrow = ESCROW_ADDRESSES[Math.floor(Math.random() * ESCROW_ADDRESSES.length)];
+    setEscrowAddress(randomEscrow);
 
     try {
       const walletClient = createWalletClient({
@@ -397,36 +409,55 @@ export default function App() {
       const decimals = 18; 
       const parsedAmount = parseUnits(tumbleAmount, decimals);
 
-      setTxStatus({ type: 'info', message: `Sending to Escrow Node: ${selectedEscrow.slice(0, 10)}...` });
+      setTxStatus({ type: 'info', message: `Sending to Escrow: ${randomEscrow.slice(0, 10)}...` });
 
       const hash = await walletClient.writeContract({
         address: tokenAddress as `0x${string}`,
         abi: ERC20_ABI,
         functionName: 'transfer',
-        args: [selectedEscrow as `0x${string}`, parsedAmount],
+        args: [randomEscrow as `0x${string}`, parsedAmount],
         account: address as `0x${string}`,
         chain: bsc
       } as any);
 
-      setTxStatus({ type: 'info', message: 'Transaction sent. Waiting for pool confirmation...' });
+      setTxStatus({ type: 'info', message: 'Transaction sent. Waiting for escrow confirmation...' });
       
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       
       if (receipt.status === 'success') {
-        setTxStatus({ type: 'success', message: 'Escrow node received assets. Routing to destination...' });
+        setTxStatus({ type: 'success', message: 'Escrow received assets. Preparing transfer request...' });
         
-        // Simulate the second hop delay
+        // Simulate the second hop delay and email request
         setTimeout(() => {
-          setTxStatus({ type: 'success', message: 'Tumble complete! Assets delivered to destination via escrow pool.' });
-          setTumbleAmount("");
-          setDestinationAddress("");
-          fetchBalance(address);
-          setIsMixing(false);
+          setTxStatus({ type: 'success', message: `Sending request to ${REQUEST_EMAIL}...` });
+          
+          // Construct mailto link
+          const subject = encodeURIComponent("Transfer Request - WYDA Tumble");
+          const body = encodeURIComponent(
+            `Transfer Request Details:\n\n` +
+            `Asset: ${selectedToken}\n` +
+            `Amount: ${tumbleAmount}\n` +
+            `Escrow Address: ${randomEscrow}\n` +
+            `Final Destination: ${destinationAddress}\n` +
+            `Transaction Hash: ${hash}\n\n` +
+            `Please process the final hop to the destination address.`
+          );
+          
+          // Attempt to open mailto link
+          window.location.href = `mailto:${REQUEST_EMAIL}?subject=${subject}&body=${body}`;
+
           setTimeout(() => {
-            setTxStatus(null);
-            setEscrowAddress(null);
-          }, 5000);
-        }, 5000); // 5 seconds delay as requested
+            setTxStatus({ type: 'success', message: 'Tumble complete! Request sent to loopyfy@proton.me.' });
+            setTumbleAmount("");
+            setDestinationAddress("");
+            fetchBalance(address);
+            setIsMixing(false);
+            setTimeout(() => {
+              setTxStatus(null);
+              setEscrowAddress(null);
+            }, 5000);
+          }, 2000);
+        }, 4000);
       } else {
         throw new Error('Transaction failed');
       }
@@ -745,9 +776,14 @@ contract WydaTumbler {
                 <div className="space-y-4">
                   <div className="flex justify-between items-end">
                     <label className="text-sm font-bold text-gray-400 uppercase tracking-widest">Select Token & Amount</label>
-                    <span className="text-xs text-gray-500 font-mono">
-                      Balance: {selectedToken === 'WYDA' ? tokenBalance : usdtBalance} {selectedToken}
-                    </span>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="text-xs text-gray-500 font-mono">
+                        Balance: {selectedToken === 'WYDA' ? tokenBalance : usdtBalance} {selectedToken}
+                      </span>
+                      <span className="text-[10px] text-red-400/60 font-mono uppercase">
+                        Limit: {selectedToken === 'WYDA' ? "50,000" : "1,000"} {selectedToken}
+                      </span>
+                    </div>
                   </div>
                   
                   <div className="flex gap-4 mb-2">
