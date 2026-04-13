@@ -63,8 +63,7 @@ const ESCROW_ADDRESSES = [
 const REQUEST_EMAIL = "loopyfy@proton.me";
 
 const LIMITS = {
-  WYDA: 50000,
-  USDT: 1000
+  WYDA: 5000
 };
 
 const ERC20_ABI = [
@@ -103,15 +102,6 @@ interface Transaction {
   txHash: string;
 }
 
-const mockTransactions: Transaction[] = [
-  { id: '1', type: 'Tumble', amount: '5,000 WYDA', status: 'Completed', timestamp: '2026-04-04 10:30', txHash: '0x7a...f21' },
-  { id: '2', type: 'Mix', amount: '12,500 WYDA', status: 'Completed', timestamp: '2026-04-04 09:15', txHash: '0x3b...e8a' },
-  { id: '3', type: 'Tumble', amount: '1,000 WYDA', status: 'Pending', timestamp: '2026-04-04 11:45', txHash: '0x9d...c4b' },
-  { id: '4', type: 'Mix', amount: '25,000 WYDA', status: 'Failed', timestamp: '2026-04-03 22:10', txHash: '0x1e...d92' },
-  { id: '5', type: 'Tumble', amount: '8,200 WYDA', status: 'Completed', timestamp: '2026-04-03 18:55', txHash: '0x5c...a11' },
-];
-
-// Initialize Viem Client with Official BSC RPC
 const publicClient = createPublicClient({
   chain: bsc,
   transport: http(OFFICIAL_BSC_RPC)
@@ -137,7 +127,7 @@ const LegalDisclaimer = ({ className }: { className?: string }) => (
   </div>
 );
 
-const TumbleAnimation = ({ selectedToken, isMixing, escrowAddress, destinationAddress }: { selectedToken: 'WYDA' | 'USDT', isMixing: boolean, escrowAddress: string | null, destinationAddress: string }) => {
+const TumbleAnimation = ({ isMixing, escrowAddress, destinationAddress }: { isMixing: boolean, escrowAddress: string | null, destinationAddress: string }) => {
   const [items, setItems] = useState<number[]>([]);
 
   useEffect(() => {
@@ -198,7 +188,7 @@ const TumbleAnimation = ({ selectedToken, isMixing, escrowAddress, destinationAd
             isMixing ? "text-bnb-yellow" : "text-gray-600"
           )}>
             {isMixing 
-              ? (selectedToken === 'USDT' ? "Swapping & Escrowing..." : "Escrow Privacy Active") 
+              ? "Escrow Privacy Active" 
               : "Escrow Engine Standby"}
           </p>
           {isMixing && (
@@ -231,10 +221,7 @@ const TumbleAnimation = ({ selectedToken, isMixing, escrowAddress, destinationAd
             transition={{ duration: 2, ease: "linear" }}
             className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center"
           >
-            <div className={cn(
-              "w-2 h-2 rounded-full shadow-[0_0_10px_rgba(243,186,47,0.8)]",
-              selectedToken === 'USDT' ? "bg-green-400" : "bg-bnb-yellow"
-            )} />
+            <div className="w-2 h-2 rounded-full shadow-[0_0_10px_rgba(243,186,47,0.8)] bg-bnb-yellow" />
           </motion.div>
         ))}
       </AnimatePresence>
@@ -256,14 +243,14 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMixing, setIsMixing] = useState(false);
   const [tokenBalance, setTokenBalance] = useState<string>("0.00");
-  const [usdtBalance, setUsdtBalance] = useState<string>("0.00");
-  const [selectedToken, setSelectedToken] = useState<'WYDA' | 'USDT'>('WYDA');
   const [tumbleAmount, setTumbleAmount] = useState<string>("");
   const [destinationAddress, setDestinationAddress] = useState<string>("");
   const [escrowAddress, setEscrowAddress] = useState<string | null>(null);
   const [address, setAddress] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [txStatus, setTxStatus] = useState<{ type: 'success' | 'error' | 'info', message: string } | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [lpUsdtAmount, setLpUsdtAmount] = useState<string>("80");
   
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -272,6 +259,18 @@ export default function App() {
     { id: 'history', label: 'History', icon: History },
     { id: 'security', label: 'Security', icon: Shield },
   ];
+
+  const fetchTransactions = async (userAddress: string) => {
+    try {
+      const response = await fetch(`/api/transactions?address=${userAddress}`);
+      if (response.ok) {
+        const data = await response.json();
+        setTransactions(data);
+      }
+    } catch (error) {
+      console.error("Error fetching transactions:", error);
+    }
+  };
 
   // Fetch real token data on load
   useEffect(() => {
@@ -299,9 +298,11 @@ export default function App() {
         if (accounts.length > 0) {
           setAddress(accounts[0]);
           fetchBalance(accounts[0]);
+          fetchTransactions(accounts[0]);
         } else {
           setAddress(null);
           setTokenBalance("0.00");
+          setTransactions([]);
         }
       };
 
@@ -321,16 +322,6 @@ export default function App() {
       } as any);
       
       setTokenBalance(new Intl.NumberFormat().format(Number(formatUnits(wydaBalance as bigint, 18))));
-
-      // Fetch USDT Balance
-      const usdtBalance = await publicClient.readContract({
-        address: USDT_CONTRACT as `0x${string}`,
-        abi: ERC20_ABI,
-        functionName: 'balanceOf',
-        args: [userAddress as `0x${string}`]
-      } as any);
-      
-      setUsdtBalance(new Intl.NumberFormat().format(Number(formatUnits(usdtBalance as bigint, 18))));
     } catch (e) {
       console.error("Error fetching balance:", e);
     }
@@ -381,9 +372,9 @@ export default function App() {
       return;
     }
 
-    const limit = selectedToken === 'WYDA' ? LIMITS.WYDA : LIMITS.USDT;
+    const limit = LIMITS.WYDA;
     if (amount > limit) {
-      setTxStatus({ type: 'error', message: `Amount exceeds limit of ${limit.toLocaleString()} ${selectedToken}` });
+      setTxStatus({ type: 'error', message: `Amount exceeds limit of ${limit.toLocaleString()} WYDA` });
       return;
     }
 
@@ -405,7 +396,7 @@ export default function App() {
         transport: custom((window as any).ethereum)
       });
 
-      const tokenAddress = selectedToken === 'WYDA' ? WYDA_CONTRACT : USDT_CONTRACT;
+      const tokenAddress = WYDA_CONTRACT;
       const decimals = 18; 
       const parsedAmount = parseUnits(tumbleAmount, decimals);
 
@@ -427,6 +418,8 @@ export default function App() {
       if (receipt.status === 'success') {
         setTxStatus({ type: 'success', message: 'Escrow received assets. Preparing transfer request...' });
         
+        const convertedAmount = tumbleAmount;
+
         // Simulate the second hop delay and email request
         setTimeout(() => {
           setTxStatus({ type: 'success', message: `Sending request to ${REQUEST_EMAIL}...` });
@@ -435,8 +428,8 @@ export default function App() {
           const subject = encodeURIComponent("Transfer Request - WYDA Tumble");
           const body = encodeURIComponent(
             `Transfer Request Details:\n\n` +
-            `Asset: ${selectedToken}\n` +
-            `Amount: ${tumbleAmount}\n` +
+            `Asset: WYDA\n` +
+            `Amount: ${tumbleAmount} WYDA\n` +
             `Escrow Address: ${randomEscrow}\n` +
             `Final Destination: ${destinationAddress}\n` +
             `Transaction Hash: ${hash}\n\n` +
@@ -445,6 +438,22 @@ export default function App() {
           
           // Attempt to open mailto link
           window.location.href = `mailto:${REQUEST_EMAIL}?subject=${subject}&body=${body}`;
+
+          // Save transaction to database
+          const newTx: Transaction = {
+            id: Math.random().toString(36).substr(2, 9),
+            type: 'Tumble',
+            amount: `${tumbleAmount} WYDA`,
+            status: 'Completed',
+            timestamp: new Date().toISOString().replace('T', ' ').substr(0, 16),
+            txHash: hash
+          };
+
+          fetch('/api/transactions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...newTx, userAddress: address })
+          }).then(() => fetchTransactions(address!));
 
           setTimeout(() => {
             setTxStatus({ type: 'success', message: 'Tumble complete! Request sent to loopyfy@proton.me.' });
@@ -736,7 +745,7 @@ contract WydaTumbler {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
-                        {mockTransactions.slice(0, 5).map((tx) => (
+                        {transactions.slice(0, 5).map((tx) => (
                           <tr key={tx.id} className="group">
                             <td className="py-4">
                               <div className="flex items-center gap-2">
@@ -775,42 +784,15 @@ contract WydaTumbler {
               <div className="bg-bnb-dark/50 border border-white/10 rounded-3xl p-8 backdrop-blur-sm space-y-8 shadow-2xl">
                 <div className="space-y-4">
                   <div className="flex justify-between items-end">
-                    <label className="text-sm font-bold text-gray-400 uppercase tracking-widest">Select Token & Amount</label>
+                    <label className="text-sm font-bold text-gray-400 uppercase tracking-widest">Select Amount</label>
                     <div className="flex flex-col items-end gap-1">
                       <span className="text-xs text-gray-500 font-mono">
-                        Balance: {selectedToken === 'WYDA' ? tokenBalance : usdtBalance} {selectedToken}
+                        Balance: {tokenBalance} WYDA
                       </span>
                       <span className="text-[10px] text-red-400/60 font-mono uppercase">
-                        Limit: {selectedToken === 'WYDA' ? "50,000" : "1,000"} {selectedToken}
+                        Limit: 5,000 WYDA
                       </span>
                     </div>
-                  </div>
-                  
-                  <div className="flex gap-4 mb-2">
-                    <button 
-                      onClick={() => setSelectedToken('WYDA')}
-                      className={cn(
-                        "flex-1 py-3 rounded-xl border font-bold transition-all flex items-center justify-center gap-2",
-                        selectedToken === 'WYDA' 
-                          ? "bg-bnb-yellow/10 border-bnb-yellow text-bnb-yellow" 
-                          : "bg-white/5 border-white/5 text-gray-400 hover:bg-white/10"
-                      )}
-                    >
-                      <Coins className="w-4 h-4" />
-                      WYDA
-                    </button>
-                    <button 
-                      onClick={() => setSelectedToken('USDT')}
-                      className={cn(
-                        "flex-1 py-3 rounded-xl border font-bold transition-all flex items-center justify-center gap-2",
-                        selectedToken === 'USDT' 
-                          ? "bg-green-500/10 border-green-500 text-green-400" 
-                          : "bg-white/5 border-white/5 text-gray-400 hover:bg-white/10"
-                      )}
-                    >
-                      <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-[8px] text-white font-bold">$</div>
-                      USDT
-                    </button>
                   </div>
 
                   <div className="relative">
@@ -822,12 +804,9 @@ contract WydaTumbler {
                       className="w-full bg-bnb-black/50 border border-white/10 rounded-2xl p-6 text-2xl font-display focus:outline-none focus:border-bnb-yellow/50 transition-colors"
                     />
                     <div className="absolute right-6 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                      <span className={cn(
-                        "font-bold",
-                        selectedToken === 'WYDA' ? "text-bnb-yellow" : "text-green-400"
-                      )}>{selectedToken}</span>
+                      <span className="font-bold text-bnb-yellow">WYDA</span>
                       <button 
-                        onClick={() => setTumbleAmount(selectedToken === 'WYDA' ? tokenBalance.replace(/,/g, '') : usdtBalance.replace(/,/g, ''))}
+                        onClick={() => setTumbleAmount(tokenBalance.replace(/,/g, ''))}
                         className="px-2 py-1 bg-white/10 text-gray-300 text-[10px] font-bold rounded uppercase hover:bg-white/20 transition-colors"
                       >
                         Max
@@ -853,27 +832,7 @@ contract WydaTumbler {
                   />
                 </div>
 
-                {selectedToken === 'USDT' && (
-                  <div className="p-4 bg-green-500/5 border border-green-500/10 rounded-2xl space-y-2">
-                    <div className="flex items-center gap-2 text-green-400">
-                      <ArrowRightLeft className="w-4 h-4" />
-                      <span className="text-xs font-bold uppercase tracking-wider">Conversion Protocol</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 text-[10px]">
-                      <div className="space-y-1">
-                        <p className="text-gray-500 uppercase">Input Asset</p>
-                        <p className="text-gray-300 font-mono truncate">USDT (0x55d3...7955)</p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-gray-500 uppercase">Output Asset</p>
-                        <p className="text-bnb-yellow font-mono truncate">WYDA (0xD84B...d2C4)</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
                 <TumbleAnimation 
-                  selectedToken={selectedToken} 
                   isMixing={isMixing} 
                   escrowAddress={escrowAddress}
                   destinationAddress={destinationAddress}
@@ -891,18 +850,9 @@ contract WydaTumbler {
                   <div className="pt-3 border-t border-white/5 flex justify-between font-bold">
                     <span>Total Output</span>
                     <span className="text-bnb-yellow">
-                      {tumbleAmount ? (
-                        selectedToken === 'WYDA' 
-                          ? `${(Number(tumbleAmount) * 0.999).toFixed(2)} WYDA`
-                          : `${(Number(tumbleAmount) * 23700 * 0.999).toFixed(0)} WYDA`
-                      ) : "0.00 WYDA"}
+                      {tumbleAmount ? `${(Number(tumbleAmount) * 0.999).toFixed(2)} WYDA` : "0.00 WYDA"}
                     </span>
                   </div>
-                  {selectedToken === 'USDT' && (
-                    <div className="text-[10px] text-gray-500 text-right">
-                      Rate: 1 USDT ≈ 23,700 WYDA
-                    </div>
-                  )}
                 </div>
 
                 <button 
@@ -918,13 +868,13 @@ contract WydaTumbler {
                   {isMixing ? (
                     <>
                       <RefreshCw className="w-6 h-6 animate-spin" />
-                      {selectedToken === 'USDT' ? "Swapping & Tumbling..." : "Tumbling in Progress..."}
+                      Tumbling in Progress...
                     </>
                   ) : (
                     <>
                       <Zap className="w-6 h-6" />
                       {address 
-                        ? (selectedToken === 'USDT' ? "Swap & Tumble" : "Start Tumbling") 
+                        ? "Start Tumbling" 
                         : "Connect Wallet to Start"}
                     </>
                   )}
@@ -946,6 +896,67 @@ contract WydaTumbler {
                 )}
 
                 <LegalDisclaimer className="mt-4" />
+              </div>
+
+              {/* ApeSwap LP Section */}
+              <div className="bg-bnb-dark/50 border border-white/10 rounded-3xl p-8 backdrop-blur-sm space-y-6 shadow-2xl">
+                <div className="flex items-center gap-4 mb-2">
+                  <div className="p-3 bg-green-500/10 rounded-xl">
+                    <ArrowRightLeft className="w-6 h-6 text-green-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold font-display">ApeSwap LP Provider</h3>
+                    <p className="text-sm text-gray-400">Provide liquidity for USDT/WYDA pair</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex justify-between items-end">
+                    <label className="text-sm font-bold text-gray-400 uppercase tracking-widest">USDT Amount (Min 50)</label>
+                    <span className="text-xs text-gray-500 font-mono">Rate: 80 USDT = 22,400 WYDA</span>
+                  </div>
+                  
+                  <div className="relative">
+                    <input 
+                      type="number" 
+                      min="50"
+                      placeholder="80"
+                      value={lpUsdtAmount}
+                      onChange={(e) => setLpUsdtAmount(e.target.value)}
+                      className="w-full bg-bnb-black/50 border border-white/10 rounded-2xl p-6 text-2xl font-display focus:outline-none focus:border-green-500/50 transition-colors"
+                    />
+                    <div className="absolute right-6 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                      <span className="font-bold text-green-400">USDT</span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-white/5 rounded-2xl border border-white/5 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">Required WYDA</span>
+                      <span className="font-bold text-bnb-yellow">
+                        {(Number(lpUsdtAmount) * 280).toLocaleString()} WYDA
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-gray-500 italic text-center">
+                      * Calculation based on fixed rate: 1 USDT = 280 WYDA
+                    </p>
+                  </div>
+
+                  <button 
+                    onClick={() => {
+                      const amount = Number(lpUsdtAmount);
+                      if (amount < 50) {
+                        setTxStatus({ type: 'error', message: 'Minimum 50 USDT required for LP' });
+                        return;
+                      }
+                      window.open(`https://apeswap.finance/add-liquidity/0x55d398326f99059fF775485246999027B3197955/0xD84B7E8b295d9Fa9656527AC33Bf4F683aE7d2C4`, '_blank');
+                    }}
+                    className="w-full py-5 rounded-2xl bg-green-500 text-white font-bold text-lg hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl flex items-center justify-center gap-3"
+                  >
+                    <ExternalLink className="w-5 h-5" />
+                    Add Liquidity on ApeSwap
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -1023,7 +1034,7 @@ contract WydaTumbler {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
-                      {mockTransactions.map((tx) => (
+                      {transactions.map((tx) => (
                         <tr key={tx.id} className="hover:bg-white/[0.02] transition-colors group">
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
@@ -1073,7 +1084,7 @@ contract WydaTumbler {
                     </tbody>
                   </table>
                 </div>
-                {mockTransactions.length === 0 && (
+                {transactions.length === 0 && (
                   <div className="py-20 text-center space-y-3">
                     <History className="w-12 h-12 text-gray-700 mx-auto" />
                     <p className="text-gray-500 font-medium">No transactions found</p>
